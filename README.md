@@ -16,8 +16,9 @@ LLM can interpret them; silently dropping a point is not recoverable.
   and date; unanchored comments go into an appendix.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
-- OCR uses Tesseract by default; `--livetext` uses Apple's Live Text via
-  `ocrmac` for printed English text.
+- OCR defaults to Apple's Live Text via `ocrmac`; `--tesseract` switches to
+  Tesseract. Live Text falls back to Tesseract per image when it returns no
+  usable text.
 - `md/` mirrors `src/` and includes a generated index.
 - Watermark text and short fragments from the native text layer are kept; OCR
   from images that yields fewer than 10 non-space characters is dropped as
@@ -73,8 +74,8 @@ Common options:
 ```bash
 uv run python convert_to_md.py --force          # reconvert everything
 uv run python convert_to_md.py --only "Lecture 4"
-uv run python convert_to_md.py --tesseract      # default OCR engine
-uv run python convert_to_md.py --livetext       # Apple Live Text (macOS Sonoma+)
+uv run python convert_to_md.py --livetext       # default: Apple Live Text
+uv run python convert_to_md.py --tesseract      # use Tesseract instead
 uv run python convert_to_md.py --no-ocr         # skip image text
 uv run python convert_to_md.py --jobs 4         # worker processes
 uv run python convert_to_md.py --src path/to/src --out path/to/md
@@ -84,12 +85,12 @@ Without `--force`, existing Markdown is skipped. Failed documents do not stop
 the batch; failures are summarised at the end. A partial `--only` run does not
 rebuild the library index.
 
-Tesseract is the default and requires the Homebrew binary. `--livetext` uses
-Apple's Live Text through `ocrmac`; it requires macOS Sonoma or later and is
-usually more accurate on printed English, but its line ordering can be less
-faithful in multi-column forms. If Live Text returns no usable text for an
-image, the converter falls back to Tesseract for that image so content is not
-dropped.
+Live Text is the default and requires macOS Sonoma or later. It is usually
+more accurate on printed English than Tesseract, but its line ordering can be
+less faithful in multi-column forms. If Live Text returns no usable text for an
+image, the converter retries that image with Tesseract so content is not
+dropped. `--tesseract` requires the Homebrew binary and uses four
+page-segmentation modes for every image.
 
 ## Design / Algorithm
 
@@ -147,7 +148,14 @@ process after all workers finish.
 DOCX images and PDF image regions share `ocr_image()`, which selects the
 configured engine.
 
-**Tesseract (default).** English-only Tesseract (`eng`) with no image
+**Apple Live Text (default).** Uses Apple's Live Text framework through
+`ocrmac`, with English (`en-US`) preferred. It is usually more accurate than
+Tesseract on printed English and keeps clause numbers with their text, but
+column order in forms and tables can be less faithful. It performs one
+recognition pass per image rather than the four Tesseract passes. If Live Text
+returns no usable text, the image is retried with Tesseract.
+
+**Tesseract (`--tesseract`).** English-only Tesseract (`eng`) with no image
 preprocessing, once for each of four page-segmentation modes:
 
 | PSM | Assumption | Good for |
@@ -167,13 +175,6 @@ confidence × (words / max_words)
 Raw confidence alone favours short, easy reads and can drop table rows. The
 coverage factor penalises a result that missed much of the text, without
 rewarding noisy output that simply produced more words.
-
-**Apple Live Text (`--livetext`).** Uses Apple's Live Text framework through
-`ocrmac`, with English (`en-US`) preferred. It is usually more accurate than
-Tesseract on printed English and keeps clause numbers with their text, but
-column order in forms and tables can be less faithful. It performs one
-recognition pass per image rather than the four Tesseract passes. If Live Text
-returns no usable text, the image is retried with Tesseract.
 
 Both engines discard OCR from images with fewer than 10 non-space characters
 *after* OCR. OCR is skipped only when bit-identical input has already been

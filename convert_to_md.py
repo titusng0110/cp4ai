@@ -12,9 +12,9 @@ What this script guarantees
   marked as ``<!-- page N of M -->``. Text that exists only inside PDF images
   (screenshots, table fragments, diagrams) is OCR'd and appended on the same
   page, under a clearly marked OCR comment.
-* OCR uses Tesseract by default. ``--livetext`` selects Apple's Live Text
-  through ocrmac for printed English text, with a Tesseract fallback when Live
-  Text returns nothing usable.
+* OCR defaults to Apple's Live Text through ocrmac for printed English text,
+  with a Tesseract fallback when Live Text returns nothing usable.
+  ``--tesseract`` selects Tesseract for every image instead.
 * DOCX comments are inserted next to the passage they annotate, with author
   and date; comments without a visible anchor go into an appendix. Pandoc
   preserves the anchors as ``comment-start``/``comment-end`` spans.
@@ -30,8 +30,8 @@ Usage
     uv run python convert_to_md.py --force
     uv run python convert_to_md.py --only "Lecture 4"
     uv run python convert_to_md.py --jobs 4
-    uv run python convert_to_md.py --tesseract   (default)
-    uv run python convert_to_md.py --livetext    (Apple Live Text)
+    uv run python convert_to_md.py --livetext    (default)
+    uv run python convert_to_md.py --tesseract   (Tesseract)
     uv run python convert_to_md.py --no-ocr
 
 Reproducible environment
@@ -416,6 +416,7 @@ def unplaced_comments_appendix(comments: list[tuple[int, dict[str, str]]]) -> st
 OCR_PSMS = (3, 4, 6, 11)
 OCR_LANG = "eng"
 OCR_LIVETEXT_LANGS = ("en-US",)
+DEFAULT_OCR_ENGINE = "livetext"
 
 
 def ocr_engine_label(engine: str) -> str:
@@ -554,7 +555,7 @@ def ocr_image_livetext(path: Path) -> str:
 def ocr_image(
     path: Path,
     tessdata_dir: Path | None,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     """OCR one image with the selected engine."""
     if engine == "livetext":
@@ -679,7 +680,7 @@ def ocr_image_cached(
     path: Path,
     tessdata_dir: Path | None,
     cache: dict[tuple, str] | None,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     """OCR a file, reusing text only for bit-identical input bytes."""
     if cache is None:
@@ -699,7 +700,7 @@ def ocr_image_file(
     index: int,
     tessdata_dir: Path | None,
     cache: dict[tuple, str] | None = None,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     """OCR a raster image, converting EMF/EMF+/SVG to PNG first if needed."""
     if path.suffix.lower() in {".emf", ".wmf", ".svg"}:
@@ -732,7 +733,7 @@ def replace_docx_images(
     workdir: Path,
     tessdata_dir: Path | None,
     cache: dict[tuple, str],
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> tuple[str, list[Path], set[Path]]:
     """Replace every DOCX image link or ``<img>`` tag with its OCR text."""
     failed_vectors: list[Path] = []
@@ -817,7 +818,7 @@ def figures_section(
     workdir: Path,
     tessdata_dir: Path | None,
     cache: dict[tuple, str],
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> tuple[str, int, list[Path]]:
     """OCR images that Pandoc extracted but could not place in the body.
 
@@ -882,7 +883,7 @@ def convert_docx(
     path: Path,
     out_path: Path,
     tessdata_dir: Path | None,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="notes4ai_docx_") as tmp:
@@ -986,7 +987,7 @@ def ocr_page_images(
     cache: dict[tuple, str],
     tessdata_dir: Path | None,
     native_text: str,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     page_area = page.rect.get_area()
     foreground: list[pymupdf.Rect] = []
@@ -1045,7 +1046,7 @@ def convert_pdf(
     out_path: Path,
     use_ocr: bool = True,
     tessdata_dir: Path | None = None,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> str:
     doc = pymupdf.open(path)
     try:
@@ -1111,7 +1112,7 @@ def build_index(
     out_dir: Path,
     src_root: Path,
     rows: list[tuple[Path, Path, str]],
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> None:
     label = ocr_engine_label(engine)
     lines = [
@@ -1178,7 +1179,7 @@ def convert_one(
     out_root: Path,
     use_ocr: bool,
     tessdata_dir: Path,
-    engine: str = "tesseract",
+    engine: str = DEFAULT_OCR_ENGINE,
 ) -> ConversionResult:
     """Convert one document. Each worker writes only its own output file."""
     out_path = output_path(source, src_root, out_root)
@@ -1203,14 +1204,14 @@ def main() -> int:
         dest="ocr_engine",
         action="store_const",
         const="tesseract",
-        help="OCR with Tesseract (default)",
+        help="OCR with Tesseract instead of the default Live Text",
     )
     engine_group.add_argument(
         "--livetext",
         dest="ocr_engine",
         action="store_const",
         const="livetext",
-        help="OCR with Apple Live Text via ocrmac (macOS Sonoma or later)",
+        help="OCR with Apple Live Text via ocrmac (default; macOS Sonoma or later)",
     )
     engine_group.add_argument(
         "--no-ocr",
@@ -1219,7 +1220,7 @@ def main() -> int:
         const="none",
         help="Disable OCR",
     )
-    parser.set_defaults(ocr_engine="tesseract")
+    parser.set_defaults(ocr_engine=DEFAULT_OCR_ENGINE)
     parser.add_argument("--only", default=None, help="Only convert paths containing this text")
     parser.add_argument(
         "--jobs",
