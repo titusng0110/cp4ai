@@ -46,8 +46,35 @@ NOTES4AI_SKIP_SETUP=1 notes4ai ...
 ```
 
 For development, `uv sync` installs the package in editable mode and
-`uv run notes4ai` runs it without installing globally. After pulling changes,
-refresh the installed tool with `uv tool install --force .`.
+`uv run notes4ai` runs it without installing globally.
+
+### Updating and uninstalling
+
+Because the tool is installed from a local clone, reinstall it after pulling
+changes:
+
+```bash
+cd notes4ai
+git pull
+uv tool install --force .
+```
+
+If you changed the code locally without committing, the same command rebuilds
+from your working tree. Check the installed version with:
+
+```bash
+notes4ai --version
+uv tool list
+```
+
+Uninstall with:
+
+```bash
+uv tool uninstall notes4ai
+```
+
+This removes the `notes4ai` command and its isolated environment. Your
+Markdown files and the Homebrew packages remain installed.
 
 ### Installed packages
 
