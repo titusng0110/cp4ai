@@ -100,7 +100,8 @@ process after all workers finish.
    lists, tables, footnotes, text boxes and tracked changes preserved.
 2. Each image is replaced by its OCR text. Markdown image links and raw
    `<img>` tags are both handled. Images inside tables become inline text so
-   the table stays intact; other images become blockquotes.
+   the table stays intact; other images become blockquotes. Identical image
+   bytes are OCR'd once per document.
 3. Floating drawings that Pandoc extracts but cannot place in the body are
    OCR'd in a figures section at the end.
 4. DOCX comments are read from `word/comments.xml` and inserted after the
@@ -144,8 +145,10 @@ four page-segmentation modes:
 | 11 | sparse text | diagrams, labels, screenshots |
 
 Each OCR'd image region is run through all four modes; results are ranked by
-coverage-adjusted confidence. OCR is skipped only when an identical rendered
-region has already been processed in the same document:
+coverage-adjusted confidence. OCR is skipped only when bit-identical input has
+already been processed in the same document: DOCX images are keyed by a SHA-256
+of the image bytes (or the rasterised PNG for EMF/WMF/SVG), while PDF regions
+are keyed by a SHA-256 of the rendered pixels:
 
 ```text
 confidence × (words / max_words)

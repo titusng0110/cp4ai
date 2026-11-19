@@ -630,19 +630,37 @@ def vector_to_png(source: Path, out_png: Path, workdir: Path) -> bool:
     return False
 
 
+def ocr_image_cached(
+    path: Path,
+    tessdata_dir: Path | None,
+    cache: dict[tuple, str] | None,
+) -> str:
+    """OCR a file, reusing text only for bit-identical input bytes."""
+    if cache is None:
+        return ocr_image(path, tessdata_dir)
+    data = path.read_bytes()
+    cache_key = (path.suffix.lower(), len(data), hashlib.sha256(data).digest())
+    if cache_key in cache:
+        return cache[cache_key]
+    text = ocr_image(path, tessdata_dir)
+    cache[cache_key] = text
+    return text
+
+
 def ocr_image_file(
     path: Path,
     workdir: Path,
     index: int,
     tessdata_dir: Path | None,
+    cache: dict[tuple, str] | None = None,
 ) -> str:
     """OCR a raster image, converting EMF/EMF+/SVG to PNG first if needed."""
     if path.suffix.lower() in {".emf", ".wmf", ".svg"}:
         png_path = workdir / f"vector_{index}.png"
         if not vector_to_png(path, png_path, workdir):
             return ""
-        return ocr_image(png_path, tessdata_dir)
-    return ocr_image(path, tessdata_dir)
+        return ocr_image_cached(png_path, tessdata_dir, cache)
+    return ocr_image_cached(path, tessdata_dir, cache)
 
 
 def ocr_blockquote(text: str, label: str) -> str:
@@ -666,6 +684,7 @@ def replace_docx_images(
     media_dir: Path,
     workdir: Path,
     tessdata_dir: Path | None,
+    cache: dict[tuple, str],
 ) -> tuple[str, list[Path], set[Path]]:
     """Replace every DOCX image link or ``<img>`` tag with its OCR text."""
     failed_vectors: list[Path] = []
@@ -681,7 +700,7 @@ def replace_docx_images(
 
         counter += 1
         referenced.add(image_path)
-        text = ocr_image_file(image_path, workdir, counter, tessdata_dir)
+        text = ocr_image_file(image_path, workdir, counter, tessdata_dir, cache)
         if text and useful_ocr(text):
             return text, label, None
         if image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
@@ -749,6 +768,7 @@ def figures_section(
     referenced: set[Path],
     workdir: Path,
     tessdata_dir: Path | None,
+    cache: dict[tuple, str],
 ) -> tuple[str, int, list[Path]]:
     """OCR images that Pandoc extracted but could not place in the body.
 
@@ -769,7 +789,7 @@ def figures_section(
         if image_path.resolve() in referenced:
             continue
         index += 1
-        text = ocr_image_file(image_path, workdir, index, tessdata_dir)
+        text = ocr_image_file(image_path, workdir, index, tessdata_dir, cache)
         if text and useful_ocr(text):
             figures.append((image_path.name, text))
         elif image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
@@ -831,11 +851,12 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
             raise RuntimeError(f"Pandoc failed for {path}:\n{proc.stderr}")
 
         media_dir = workdir / "media"
+        ocr_cache: dict[tuple, str] = {}
         body, failed_vectors, referenced = replace_docx_images(
-            proc.stdout.strip(), media_dir, workdir, tessdata_dir
+            proc.stdout.strip(), media_dir, workdir, tessdata_dir, ocr_cache
         )
         figures, figure_count, more_failed = figures_section(
-            media_dir, referenced, workdir, tessdata_dir
+            media_dir, referenced, workdir, tessdata_dir, ocr_cache
         )
         vector_files = sorted(set(failed_vectors + more_failed), key=natural_key)
         header = extract_docx_header(path)
