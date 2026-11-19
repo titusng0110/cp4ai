@@ -16,6 +16,8 @@ LLM can interpret them; silently dropping a point is not recoverable.
   and date; unanchored comments go into an appendix.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
+- OCR uses Tesseract by default; `--livetext` uses Apple's Live Text via
+  `ocrmac` for printed English text.
 - `md/` mirrors `src/` and includes a generated index.
 - Watermark text and short fragments from the native text layer are kept; OCR
   from images that yields fewer than 10 non-space characters is dropped as
@@ -44,7 +46,7 @@ setup normally needs no downloads.
 
 - Python 3.13
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
-  `pypandoc-binary 1.17`, `tabulate 0.10.0`
+  `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`
 - Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4_1`, `tesseract 5.5.4`
 - Tesseract data: `eng.traineddata`, `configs/tsv`
 
@@ -71,6 +73,8 @@ Common options:
 ```bash
 uv run python convert_to_md.py --force          # reconvert everything
 uv run python convert_to_md.py --only "Lecture 4"
+uv run python convert_to_md.py --tesseract      # default OCR engine
+uv run python convert_to_md.py --livetext       # Apple Live Text (macOS Sonoma+)
 uv run python convert_to_md.py --no-ocr         # skip image text
 uv run python convert_to_md.py --jobs 4         # worker processes
 uv run python convert_to_md.py --src path/to/src --out path/to/md
@@ -79,6 +83,13 @@ uv run python convert_to_md.py --src path/to/src --out path/to/md
 Without `--force`, existing Markdown is skipped. Failed documents do not stop
 the batch; failures are summarised at the end. A partial `--only` run does not
 rebuild the library index.
+
+Tesseract is the default and requires the Homebrew binary. `--livetext` uses
+Apple's Live Text through `ocrmac`; it requires macOS Sonoma or later and is
+usually more accurate on printed English, but its line ordering can be less
+faithful in multi-column forms. If Live Text returns no usable text for an
+image, the converter falls back to Tesseract for that image so content is not
+dropped.
 
 ## Design / Algorithm
 
@@ -133,9 +144,11 @@ process after all workers finish.
 
 ### OCR
 
-DOCX images and PDF image regions use the same `ocr_image()` function. It runs
-English-only Tesseract (`eng`) with no image preprocessing, once for each of
-four page-segmentation modes:
+DOCX images and PDF image regions share `ocr_image()`, which selects the
+configured engine.
+
+**Tesseract (default).** English-only Tesseract (`eng`) with no image
+preprocessing, once for each of four page-segmentation modes:
 
 | PSM | Assumption | Good for |
 |---|---|---|
@@ -145,10 +158,7 @@ four page-segmentation modes:
 | 11 | sparse text | diagrams, labels, screenshots |
 
 Each OCR'd image region is run through all four modes; results are ranked by
-coverage-adjusted confidence. OCR is skipped only when bit-identical input has
-already been processed in the same document: DOCX images are keyed by a SHA-256
-of the image bytes (or the rasterised PNG for EMF/WMF/SVG), while PDF regions
-are keyed by a SHA-256 of the rendered pixels:
+coverage-adjusted confidence:
 
 ```text
 confidence × (words / max_words)
@@ -157,6 +167,19 @@ confidence × (words / max_words)
 Raw confidence alone favours short, easy reads and can drop table rows. The
 coverage factor penalises a result that missed much of the text, without
 rewarding noisy output that simply produced more words.
+
+**Apple Live Text (`--livetext`).** Uses Apple's Live Text framework through
+`ocrmac`, with English (`en-US`) preferred. It is usually more accurate than
+Tesseract on printed English and keeps clause numbers with their text, but
+column order in forms and tables can be less faithful. It performs one
+recognition pass per image rather than the four Tesseract passes. If Live Text
+returns no usable text, the image is retried with Tesseract.
+
+Both engines discard OCR from images with fewer than 10 non-space characters
+*after* OCR. OCR is skipped only when bit-identical input has already been
+processed in the same document: DOCX images are keyed by a SHA-256 of the image
+bytes (or the rasterised PNG for EMF/WMF/SVG), while PDF regions are keyed by a
+SHA-256 of the rendered pixels.
 
 ### Parallelism
 
