@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Convert DOCX and PDF study material into AI-friendly Markdown.
 
 What this script guarantees
@@ -25,6 +24,7 @@ Usage
     uv run python convert_to_md.py
     uv run python convert_to_md.py --force
     uv run python convert_to_md.py --only "Lecture 4"
+    uv run python convert_to_md.py --jobs 4
     uv run python convert_to_md.py --no-ocr
 
 Reproducible environment
@@ -33,7 +33,6 @@ Reproducible environment
     pymupdf==1.28.2
     pymupdf4llm==0.3.4
     pypandoc-binary==1.17        (bundles Pandoc 3.9)
-    opencv-python-headless==5.1.0.95
     numpy==2.5.5
     tabulate==0.10.0
     Tesseract 5.5.4              (brew install tesseract)
@@ -52,13 +51,14 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
-from typing import Iterable
+from typing import NamedTuple
 from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
-import cv2
 import numpy as np
 import pymupdf
 import pymupdf4llm
@@ -194,12 +194,7 @@ def extract_docx_header(path: Path) -> str:
                     headers.append(text)
     except (zipfile.BadZipFile, KeyError, ET.ParseError):
         return ""
-    seen: set[str] = set()
-    for header in headers:
-        if header not in seen:
-            return header
-        seen.add(header)
-    return ""
+    return headers[0] if headers else ""
 
 
 def extract_docx_comments(path: Path) -> list[dict[str, str]]:
@@ -264,9 +259,11 @@ def comments_appendix(comments: list[dict[str, str]]) -> str:
         "",
         "## Appendix: Comments in the original DOCX",
         "",
-        "> Word stores comments separately from the body text. Pandoc does not "
-        "emit them, so they are reproduced verbatim below with their author, "
-        "date, and the passage they were attached to.",
+        (
+            "> Word stores comments separately from the body text. Pandoc does not "
+            "emit them, so they are reproduced verbatim below with their author, "
+            "date, and the passage they were attached to."
+        ),
     ]
     for index, comment in enumerate(comments, start=1):
         meta = f"### Comment {index} — {comment['author']}"
@@ -293,64 +290,70 @@ def comments_appendix(comments: list[dict[str, str]]) -> str:
 OCR_PSMS = (3, 4, 6, 11)
 
 
-def tesseract_tsv(
-    image: Path, psm: int, tessdata_dir: Path | None
-) -> tuple[str, float, int]:
-    """Run Tesseract and return reconstructed text, mean confidence, word count.
+class OcrResult(NamedTuple):
+    text: str
+    confidence: float
+    words: int
 
-    The confidence and word count feed the mode selector in :func:`ocr_image`;
-    no image preprocessing is applied.
+
+def tesseract_tsv(image: Path, psm: int, tessdata_dir: Path | None) -> OcrResult:
+    """Run Tesseract and return reconstructed text, confidence and word count.
+
+    Confidence is weighted by word length, so a few long, low-confidence words
+    cannot dominate the mean. No image preprocessing is applied.
     """
     cmd = ["tesseract", str(image), "stdout", "-l", "eng+chi_tra", "--psm", str(psm), "tsv"]
     if tessdata_dir and (tessdata_dir / "eng.traineddata").exists():
         cmd.extend(["--tessdata-dir", str(tessdata_dir)])
     env = dict(os.environ, OMP_THREAD_LIMIT="1")
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True, env=env)
     if proc.returncode != 0:
-        return "", 0.0, 0
+        return OcrResult("", 0.0, 0)
 
     lines = proc.stdout.splitlines()
     if lines and lines[0].startswith("level"):
         lines = lines[1:]
 
     output: list[str] = []
-    words: list[str] = []
-    current_key: tuple[str, ...] | None = None
-    previous_key: tuple[str, ...] | None = None
+    line_words: list[str] = []
+    current_key: tuple[str, str, str, str] | None = None
+    last_paragraph: str | None = None
     total = 0.0
     weight = 0
     word_count = 0
+
     for line in lines:
         parts = line.split("\t")
         if len(parts) < 12:
             continue
-        text = parts[11].strip()
-        if not text:
+        word = parts[11].strip()
+        if not word:
             continue
-        key = tuple(parts[1:5])  # page, block, paragraph, line
+        key = (parts[1], parts[2], parts[3], parts[4])  # page, block, paragraph, line
         if current_key is not None and key != current_key:
-            output.append(" ".join(words))
-            words = []
-            if previous_key is not None and key[2] != previous_key[2]:
+            output.append(" ".join(line_words))
+            line_words = []
+            if last_paragraph is not None and key[2] != last_paragraph:
                 output.append("")
-        if current_key is not None and key != current_key:
-            previous_key = current_key
+            last_paragraph = current_key[2]
         current_key = key
-        words.append(text)
+        line_words.append(word)
+
         try:
             confidence = float(parts[10])
         except ValueError:
-            confidence = -1.0
+            continue
         if confidence >= 0:
-            total += confidence * len(text)
-            weight += len(text)
+            total += confidence * len(word)
+            weight += len(word)
             word_count += 1
-    if words:
-        output.append(" ".join(words))
+
+    if line_words:
+        output.append(" ".join(line_words))
 
     text = "\n".join(output).replace("\x0c", "\n")
     mean_confidence = total / weight if weight else 0.0
-    return text, mean_confidence, word_count
+    return OcrResult(text, mean_confidence, word_count)
 
 
 def ocr_image(path: Path, tessdata_dir: Path | None) -> str:
@@ -371,27 +374,43 @@ def ocr_image(path: Path, tessdata_dir: Path | None) -> str:
     This never rewards extra words (the largest result is not penalised), but
     a truncated result needs a clearly higher confidence to win.
     """
-    runs: list[tuple[float, int, str, int]] = []
+    runs: list[OcrResult] = []
     for psm in OCR_PSMS:
-        text, confidence, words = tesseract_tsv(path, psm=psm, tessdata_dir=tessdata_dir)
-        if text.strip():
-            runs.append((confidence, words, text, psm))
+        result = tesseract_tsv(path, psm=psm, tessdata_dir=tessdata_dir)
+        if result.text.strip():
+            runs.append(result)
     if not runs:
         return ""
 
-    max_words = max(run[1] for run in runs)
+    max_words = max(run.words for run in runs)
     if max_words <= 0:
-        best = max(runs, key=lambda run: run[0])
+        best = max(runs, key=lambda run: run.confidence)
     else:
-        best = max(runs, key=lambda run: (run[0] * run[1] / max_words, run[1], run[0]))
+        best = max(
+            runs,
+            key=lambda run: (
+                run.confidence * run.words / max_words,
+                run.words,
+                run.confidence,
+            ),
+        )
 
-    text = best[2]
+    text = best.text
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = "\n".join(
         line for line in text.splitlines() if not (WATERMARK_RE.search(line) and len(line.strip()) < 40)
     )
     return text.strip()
+
+
+def save_bgr_png(bgr: np.ndarray, out_path: Path) -> bool:
+    """Save a BGR uint8 array as PNG using PyMuPDF (no OpenCV)."""
+    height, width = bgr.shape[:2]
+    rgb = np.ascontiguousarray(bgr[:, :, ::-1])
+    pix = pymupdf.Pixmap(pymupdf.csRGB, width, height, rgb.tobytes(), 0)
+    pix.save(str(out_path))
+    return out_path.exists() and out_path.stat().st_size > 0
 
 
 def extract_emf_plus_bitmap(emf_path: Path, out_png: Path) -> bool:
@@ -447,8 +466,7 @@ def extract_emf_plus_bitmap(emf_path: Path, out_png: Path) -> bool:
                         bgr = pixels.reshape(height, stride)[:, : width * 3].reshape(
                             height, width, 3
                         )
-                    cv2.imwrite(str(out_png), bgr)
-                    return out_png.exists() and out_png.stat().st_size > 0
+                    return save_bgr_png(bgr, out_png)
             if record_size < 12 or cursor + record_size > end:
                 break
             cursor += record_size
@@ -460,6 +478,7 @@ def svg_to_png(svg_path: Path, out_png: Path, width: int = 2400) -> bool:
         return False
     proc = subprocess.run(
         ["rsvg-convert", str(svg_path), "-o", str(out_png), "--width", str(width)],
+        check=False,
         capture_output=True,
         text=True,
     )
@@ -479,6 +498,7 @@ def vector_to_png(source: Path, out_png: Path, workdir: Path) -> bool:
                 return False
             proc = subprocess.run(
                 [converter, "-p", "-i", str(source), "-o", str(svg_path)],
+                check=False,
                 capture_output=True,
                 text=True,
             )
@@ -595,9 +615,11 @@ def figures_section(
     out = [
         "## Figures from the original document (OCR text)",
         "",
-        "> Pandoc could not position these floating/anchored drawings in the "
-        "body, but the images were still present in the DOCX. Their text is "
-        "reproduced below in image order and may contain recognition errors.",
+        (
+            "> Pandoc could not position these floating/anchored drawings in the "
+            "body, but the images were still present in the DOCX. Their text is "
+            "reproduced below in image order and may contain recognition errors."
+        ),
     ]
     for number, (name, text) in enumerate(figures, start=1):
         out.extend(["", f"### Figure {number} — {name}", ""])
@@ -611,10 +633,11 @@ def vector_note(vector_files: list[Path]) -> str:
     lines = [
         "## Vector images (not OCR'd)",
         "",
-        "> The original DOCX contains EMF/WMF/SVG vector drawings. These need a "
-        "vector renderer to convert to an image before OCR, so they were left "
-        "out of this Markdown. The source files are listed below; consult the "
-        "original DOCX if their visual detail is needed.",
+        (
+            "> The original DOCX contains EMF/WMF/SVG vector drawings that could not "
+            "be rendered to a raster image for OCR. They are listed below; consult "
+            "the original DOCX if their visual detail is needed."
+        ),
         "",
     ]
     lines.extend(f"- `{path.name}`" for path in vector_files)
@@ -623,7 +646,7 @@ def vector_note(vector_files: list[Path]) -> str:
 
 def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="cct_docx_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="notes4ai_docx_") as tmp:
         workdir = Path(tmp)
         pandoc = pypandoc.get_pandoc_path()
         cmd = [
@@ -636,7 +659,9 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
             "--track-changes=all",
             "--extract-media=media",
         ]
-        proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True)
+        proc = subprocess.run(
+            cmd, check=False, cwd=workdir, capture_output=True, text=True
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"Pandoc failed for {path}:\n{proc.stderr}")
 
@@ -682,39 +707,29 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
 
 
 def merge_boxes(boxes: Iterable[pymupdf.Rect], gap: float = 6.0) -> list[pymupdf.Rect]:
-    """Merge neighbouring image fragments (e.g. a table split into several images)."""
-    merged: list[pymupdf.Rect] = []
-    for box in sorted(boxes, key=lambda b: (b.y0, b.x0)):
-        box = pymupdf.Rect(box)
-        if box.is_empty:
-            continue
-        for i, existing in enumerate(merged):
-            expanded = pymupdf.Rect(
-                existing.x0 - gap, existing.y0 - gap, existing.x1 + gap, existing.y1 + gap
-            )
-            if expanded.intersects(box):
-                merged[i] = existing | box
-                break
-        else:
-            merged.append(box)
-
-    changed = True
-    while changed:
+    """Merge neighbouring image fragments (e.g. a table split across images)."""
+    pending = [pymupdf.Rect(box) for box in boxes]
+    pending = [box for box in pending if not box.is_empty]
+    while True:
+        merged: list[pymupdf.Rect] = []
         changed = False
-        result: list[pymupdf.Rect] = []
-        for box in merged:
-            for i, existing in enumerate(result):
+        for box in pending:
+            for index, existing in enumerate(merged):
                 expanded = pymupdf.Rect(
-                    existing.x0 - gap, existing.y0 - gap, existing.x1 + gap, existing.y1 + gap
+                    existing.x0 - gap,
+                    existing.y0 - gap,
+                    existing.x1 + gap,
+                    existing.y1 + gap,
                 )
                 if expanded.intersects(box):
-                    result[i] = existing | box
+                    merged[index] = existing | box
                     changed = True
                     break
             else:
-                result.append(box)
-        merged = result
-    return merged
+                merged.append(box)
+        if not changed:
+            return merged
+        pending = merged
 
 
 def ocr_page_images(
@@ -728,7 +743,7 @@ def ocr_page_images(
     page_area = page.rect.get_area()
     foreground: list[pymupdf.Rect] = []
     background: list[pymupdf.Rect] = []
-    xref_by_box: dict[tuple[int, int, int, int], tuple[int, ...]] = {}
+    image_boxes: list[tuple[pymupdf.Rect, int]] = []
     for info in page.get_image_info(xrefs=True):
         box = pymupdf.Rect(info["bbox"]) & page.rect
         if box.is_empty or box.width < 80 or box.height < 40:
@@ -741,20 +756,13 @@ def ocr_page_images(
             background.append(box)
         else:
             foreground.append(box)
-        key = (round(box.x0), round(box.y0), round(box.x1), round(box.y1))
-        xref_by_box.setdefault(key, tuple())
-        xref_by_box[key] += (int(info.get("xref", 0)),)
+        image_boxes.append((box, int(info.get("xref", 0))))
 
     def run_boxes(boxes: list[pymupdf.Rect], offset: int) -> list[str]:
         results: list[str] = []
         for index, box in enumerate(merge_boxes(boxes)):
             xrefs = sorted(
-                {
-                    xref
-                    for key, values in xref_by_box.items()
-                    for xref in values
-                    if pymupdf.Rect(key).intersects(box)
-                }
+                {xref for image_box, xref in image_boxes if image_box.intersects(box)}
             )
             cache_key = (tuple(xrefs), round(box.width), round(box.height))
             if cache_key in cache:
@@ -797,7 +805,7 @@ def convert_pdf(
         parts: list[str] = []
         ocr_pages = 0
         cache: dict[tuple, str] = {}
-        with tempfile.TemporaryDirectory(prefix="cct_pdf_") as tmp:
+        with tempfile.TemporaryDirectory(prefix="notes4ai_pdf_") as tmp:
             workdir = Path(tmp)
             for page_index, chunk in enumerate(chunks):
                 page = doc[page_index]
@@ -868,30 +876,63 @@ def build_index(out_dir: Path, rows: list[tuple[Path, Path, str]]) -> None:
             f"| [{rel_md}]({rel_md}) | `{display_path(src_path)}` | "
             f"{src_path.suffix.lower().lstrip('.')} | {details} |"
         )
-    lines.extend(
-        [
-            "",
-            "## Conversion notes",
-            "",
+    notes = [
+        (
             "- **DOCX:** Pandoc 3.9 (via pypandoc 1.17) to GitHub-flavored Markdown. "
             "Headings, lists, tables, footnotes, text boxes and tracked changes are "
             "preserved. Every raster image is passed through OCR with Tesseract "
             "5.5.4 and its text is inserted at the image's position where detected; "
-            "image files are not copied into the "
-            "Markdown. DOCX comments are reproduced verbatim in an appendix. "
-            "EMF+ bitmaps are extracted from the EMF record and OCR'd; classic "
-            "EMF/SVG are rasterised with libemf2svg + librsvg. Only failures are "
-            "listed in a short note at the end of the file.",
+            "image files are not copied into the Markdown. DOCX comments are "
+            "reproduced verbatim in an appendix. EMF+ bitmaps are extracted from the "
+            "EMF record and OCR'd; classic EMF/SVG are rasterised with libemf2svg + "
+            "librsvg. Only failures are listed in a short note at the end of the file."
+        ),
+        (
             "- **PDF:** PyMuPDF4LLM 0.3.4 preserves the digital text layer and page "
             "order. Pages are delimited with `<!-- page N of M -->` comments. Text "
             "that exists only inside embedded images (screenshots, table fragments, "
             "diagrams) is OCR'd with Tesseract 5.5.4 (`eng+chi_tra`), marked with "
-            "`<!-- OCR text ... -->`, and may contain recognition errors.",
+            "`<!-- OCR text ... -->`, and may contain recognition errors."
+        ),
+        (
             "- Nothing was summarized, shortened, or deliberately omitted. Blank pages "
-            "are kept as page markers so page references remain accurate.",
-        ]
-    )
+            "are kept as page markers so page references remain accurate."
+        ),
+    ]
+    lines.extend(["", "## Conversion notes", "", *notes])
     (out_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def output_path(source: Path, src_root: Path, out_root: Path) -> Path:
+    """Mirror a source path under the output directory."""
+    rel = source.relative_to(src_root)
+    name = re.sub(r"\s+", " ", source.stem).strip() + ".md"
+    return out_root / rel.parent / name
+
+
+class ConversionResult(NamedTuple):
+    out_path: Path
+    details: str | None
+    error: str | None
+
+
+def convert_one(
+    source: Path,
+    src_root: Path,
+    out_root: Path,
+    use_ocr: bool,
+    tessdata_dir: Path,
+) -> ConversionResult:
+    """Convert one document. Each worker writes only its own output file."""
+    out_path = output_path(source, src_root, out_root)
+    try:
+        if source.suffix.lower() == ".docx":
+            details = convert_docx(source, out_path, tessdata_dir)
+        else:
+            details = convert_pdf(source, out_path, use_ocr, tessdata_dir)
+        return ConversionResult(out_path, details, None)
+    except Exception as exc:  # noqa: BLE001 - report and continue the batch
+        return ConversionResult(out_path, None, f"{type(exc).__name__}: {exc}")
 
 
 def main() -> int:
@@ -901,13 +942,23 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="Overwrite existing Markdown")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR")
     parser.add_argument("--only", default=None, help="Only convert paths containing this text")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=os.cpu_count() or 1,
+        help="Parallel worker processes (default: CPU cores)",
+    )
     args = parser.parse_args()
 
     if not args.no_ocr and not shutil.which("tesseract"):
         print("ERROR: tesseract is not installed. Run: brew install tesseract", file=sys.stderr)
         return 1
 
-    sources = find_sources(args.src)
+    src_root = args.src.resolve()
+    args.out.mkdir(parents=True, exist_ok=True)
+    out_root = args.out.resolve()
+
+    sources = find_sources(src_root)
     if args.only:
         needle = args.only.lower()
         sources = [p for p in sources if needle in p.as_posix().lower()]
@@ -915,38 +966,86 @@ def main() -> int:
         print("No DOCX or PDF files found.")
         return 1
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    rows: list[tuple[Path, Path, str]] = []
-    failures: list[tuple[Path, str]] = []
+    paths: dict[Path, Path] = {}
+    for source in sources:
+        path = output_path(source, src_root, out_root)
+        if path in paths:
+            print(
+                f"ERROR: {source} and {paths[path]} both map to {path}",
+                file=sys.stderr,
+            )
+            return 1
+        paths[source] = path
 
-    for number, source in enumerate(sources, start=1):
-        rel = source.relative_to(args.src)
-        out_name = re.sub(r"\s+", " ", source.stem).strip() + ".md"
-        out_path = args.out / rel.parent / out_name
-        if out_path.exists() and not args.force:
-            print(f"[{number}/{len(sources)}] skip (exists): {rel}")
-            rows.append((out_path, source, "existing"))
-            continue
-        print(f"[{number}/{len(sources)}] {rel} …", flush=True)
-        try:
-            if source.suffix.lower() == ".docx":
-                details = convert_docx(source, out_path, TESSDATA_DIR)
-            else:
-                details = convert_pdf(source, out_path, not args.no_ocr, TESSDATA_DIR)
-            rows.append((out_path, source, details))
-            print(f"           -> {out_path.relative_to(args.out)} ({details})")
-        except Exception as exc:  # noqa: BLE001 - report and continue the batch
-            failures.append((source, str(exc)))
-            print(f"           !! FAILED: {exc}", file=sys.stderr)
+    rows_by_source: dict[Path, tuple[Path, Path, str]] = {}
+    failures_by_source: dict[Path, str] = {}
+    pending: list[Path] = []
+    for source in sources:
+        path = paths[source]
+        if path.exists() and not args.force:
+            print(f"skip (exists): {source.relative_to(src_root)}")
+            rows_by_source[source] = (path, source, "existing")
+        else:
+            pending.append(source)
+
+    jobs = max(1, args.jobs)
+
+    def record(source: Path, result: ConversionResult, done: int) -> None:
+        rel = source.relative_to(src_root)
+        if result.error:
+            failures_by_source[source] = result.error
+            print(f"[{done}/{len(pending)}] FAILED {rel}: {result.error}", file=sys.stderr)
+            return
+        rows_by_source[source] = (result.out_path, source, result.details or "")
+        print(
+            f"[{done}/{len(pending)}] {rel} -> "
+            f"{result.out_path.relative_to(out_root)} ({result.details})"
+        )
+
+    if pending and jobs == 1:
+        for done, source in enumerate(pending, start=1):
+            result = convert_one(source, src_root, out_root, not args.no_ocr, TESSDATA_DIR)
+            record(source, result, done)
+    elif pending:
+        workers = min(jobs, len(pending))
+        print(f"Converting {len(pending)} file(s) with {workers} worker process(es) …", flush=True)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(
+                    convert_one,
+                    source,
+                    src_root,
+                    out_root,
+                    not args.no_ocr,
+                    TESSDATA_DIR,
+                ): source
+                for source in pending
+            }
+            for done, future in enumerate(as_completed(futures), start=1):
+                source = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:  # noqa: BLE001 - report and continue the batch
+                    result = ConversionResult(
+                        output_path(source, src_root, out_root),
+                        None,
+                        f"{type(exc).__name__}: {exc}",
+                    )
+                record(source, result, done)
+
+    rows = [rows_by_source[source] for source in sources if source in rows_by_source]
+    failures = [
+        (source, failures_by_source[source]) for source in sources if source in failures_by_source
+    ]
 
     # A partial run must not replace the library-wide index with one row.
     if args.only:
         print("Index not rebuilt (partial --only run).")
     else:
-        build_index(args.out, rows)
+        build_index(out_root, rows)
 
     converted = sum(1 for _, _, details in rows if details != "existing")
-    print(f"\nConverted {converted} file(s) into {args.out}")
+    print(f"\nConverted {converted} file(s) into {out_root}")
     if failures:
         print(f"{len(failures)} failure(s):", file=sys.stderr)
         for source, message in failures:

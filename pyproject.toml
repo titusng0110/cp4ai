@@ -7,7 +7,6 @@ dependencies = [
     "pymupdf==1.28.2",
     "pymupdf4llm==0.3.4",
     "pypandoc-binary==1.17",
-    "opencv-python-headless==5.1.0.95",
     "numpy==2.5.5",
     "tabulate==0.10.0",
 ]
