@@ -1,4 +1,4 @@
-"""Command-line interface for notes4ai."""
+"""Command-line interface for md4ai."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ HOMEBREW_COMMANDS = (
 
 def install_homebrew_dependencies(engine: str) -> None:
     """Install missing helpers; Tesseract only when explicitly requested."""
-    if engine == "none" or sys.platform != "darwin" or os.environ.get("NOTES4AI_SKIP_SETUP"):
+    if engine == "none" or sys.platform != "darwin" or os.environ.get("CP4AI_SKIP_SETUP"):
         return
     brew = shutil.which("brew")
     if not brew:
@@ -160,7 +160,7 @@ def run_conversions(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="notes4ai",
+        prog="md4ai",
         description=(
             "Convert DOCX, PDF and PPTX files to recall-first Markdown. "
             "By default a.pdf becomes a.pdf.md next to it."

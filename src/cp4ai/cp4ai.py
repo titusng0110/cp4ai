@@ -12,7 +12,7 @@ from pathlib import Path
 
 import tiktoken
 
-from .cli import convert_one, install_homebrew_dependencies
+from .md4ai import convert_one, install_homebrew_dependencies
 from .core import DEFAULT_OCR_ENGINE
 
 SOURCE_SUFFIXES = {".docx", ".pdf", ".pptx"}
@@ -20,7 +20,7 @@ SOURCE_SUFFIXES = {".docx", ".pdf", ".pptx"}
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cp2ai",
+        prog="cp4ai",
         description=(
             "Convert DOCX/PDF/PPTX files to Markdown and copy the concatenated "
             "result to the clipboard."
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     jobs = max(1, args.jobs)
     failures = 0
 
-    with tempfile.TemporaryDirectory(prefix="notes4ai_clipboard_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cp4ai_clipboard_") as tmp:
         workdir = Path(tmp)
         planned = [
             (source, workdir / f"{index:04d}.md")

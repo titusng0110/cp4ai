@@ -29,13 +29,13 @@ What this package guarantees
 Usage
 -----
     uv tool install .
-    notes4ai a.pdf
-    notes4ai a.pptx
-    notes4ai -r notes/
-    notes4ai -rf notes/
-    notes4ai -o out/ -r notes/
-    notes4ai --tesseract a.pdf
-    notes4ai --no-ocr a.pdf
+    md4ai a.pdf
+    md4ai a.pptx
+    md4ai -r notes/
+    md4ai -rf notes/
+    md4ai -o out/ -r notes/
+    md4ai --tesseract a.pdf
+    md4ai --no-ocr a.pdf
 
 Reproducible environment
 ------------------------
@@ -914,7 +914,7 @@ def convert_docx(
     use_ocr: bool = True,
 ) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="notes4ai_docx_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cp4ai_docx_") as tmp:
         workdir = Path(tmp)
         pandoc = pypandoc.get_pandoc_path()
         cmd = [
@@ -1243,7 +1243,7 @@ def convert_pptx(
 ) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     metadata = _pptx_metadata(path)
-    with tempfile.TemporaryDirectory(prefix="notes4ai_pptx_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cp4ai_pptx_") as tmp:
         workdir = Path(tmp)
         pandoc = pypandoc.get_pandoc_path()
         proc = subprocess.run(
@@ -1417,7 +1417,7 @@ def convert_pdf(
         parts: list[str] = []
         ocr_pages = 0
         cache: dict[tuple, str] = {}
-        with tempfile.TemporaryDirectory(prefix="notes4ai_pdf_") as tmp:
+        with tempfile.TemporaryDirectory(prefix="cp4ai_pdf_") as tmp:
             workdir = Path(tmp)
             for page_index, chunk in enumerate(chunks):
                 page = doc[page_index]

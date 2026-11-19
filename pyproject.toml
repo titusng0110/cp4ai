@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "notes4ai"
+name = "cp4ai"
 version = "2.0.0"
-description = "Convert law notes from DOCX, PDF and PPTX into recall-first Markdown for LLM ingestion."
+description = "Copy 4 AI: convert DOCX, PDF and PPTX into recall-first Markdown for LLM ingestion."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13,<3.14"
@@ -21,11 +21,11 @@ dependencies = [
 ]
 
 [project.scripts]
-notes4ai = "notes4ai.cli:main"
-cp2ai = "notes4ai.cp2ai:main"
+md4ai = "cp4ai.md4ai:main"
+cp4ai = "cp4ai.cp4ai:main"
 
 [tool.uv]
 package = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/notes4ai"]
+packages = ["src/cp4ai"]

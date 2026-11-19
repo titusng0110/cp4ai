@@ -1,3 +1,3 @@
-from .cli import main
+from .md4ai import main
 
 raise SystemExit(main())

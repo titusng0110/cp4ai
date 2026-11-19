@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Populate tools/tessdata with the language data and TSV config used by
-# convert_to_md.py. Safe to re-run.
+# cp4ai. Safe to re-run.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

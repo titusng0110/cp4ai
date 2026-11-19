@@ -1,8 +1,9 @@
-# notes4ai
+# Copy 4 AI (cp4ai)
 
-`notes4ai` converts law notes — cases, statutes, lecture outlines, problem sets
-and exam frameworks — from `.docx`, `.pdf` and `.pptx` into Markdown for
-downstream LLM ingestion.
+Copy 4 AI (package `cp4ai`) converts law notes — cases, statutes, lecture
+outlines, problem sets and exam frameworks — from `.docx`, `.pdf` and `.pptx`
+into Markdown for downstream LLM ingestion. The `md4ai` command writes files;
+`cp4ai` copies the converted chain to the clipboard.
 
 The pipeline is **recall-first**: every source word matters. OCR errors,
 duplicate text and imperfect formatting are acceptable because the downstream
@@ -30,12 +31,12 @@ Requirements: **macOS**, [Homebrew](https://brew.sh) and
 [uv](https://docs.astral.sh/uv/). Python itself is installed by `uv`.
 
 ```bash
-git clone https://github.com/titusng0110/notes4ai.git
-cd notes4ai
+git clone https://github.com/titusng0110/cp4ai.git
+cd cp4ai
 uv tool install .
 ```
 
-This installs the `notes4ai` and `cp2ai` commands. If a command is not found,
+This installs the `md4ai` and `cp4ai` commands. If a command is not found,
 run `uv tool update-shell` and restart the terminal (or add `~/.local/bin` to
 `PATH`).
 
@@ -47,11 +48,11 @@ is normally needed.
 To skip that automatic check:
 
 ```bash
-NOTES4AI_SKIP_SETUP=1 notes4ai ...
+CP4AI_SKIP_SETUP=1 md4ai ...
 ```
 
 For development, `uv sync` installs the package in editable mode and
-`uv run notes4ai` runs it without installing globally.
+`uv run md4ai` runs it without installing globally.
 
 ### Updating and uninstalling
 
@@ -59,7 +60,7 @@ Because the tool is installed from a local clone, reinstall it after pulling
 changes:
 
 ```bash
-cd notes4ai
+cd cp4ai
 git pull
 uv tool install --force .
 ```
@@ -68,17 +69,17 @@ If you changed the code locally without committing, the same command rebuilds
 from your working tree. Check the installed version with:
 
 ```bash
-notes4ai --version
+md4ai --version
 uv tool list
 ```
 
 Uninstall with:
 
 ```bash
-uv tool uninstall notes4ai
+uv tool uninstall cp4ai
 ```
 
-This removes the `notes4ai` and `cp2ai` commands and their isolated environment.
+This removes the `md4ai` and `cp4ai` commands and their isolated environment.
 Your Markdown files and the Homebrew packages remain installed.
 
 ### Installed packages
@@ -93,17 +94,17 @@ Your Markdown files and the Homebrew packages remain installed.
 ## Usage
 
 ```bash
-notes4ai a.pdf                  # writes a.pdf.md next to a.pdf
-notes4ai a.docx                 # writes a.docx.md next to a.docx
-notes4ai a.pptx                 # writes a.pptx.md next to a.pptx
+md4ai a.pdf                  # writes a.pdf.md next to a.pdf
+md4ai a.docx                 # writes a.docx.md next to a.docx
+md4ai a.pptx                 # writes a.pptx.md next to a.pptx
 
-notes4ai -r notes/              # every .pdf/.docx/.pptx under notes/, in place
-notes4ai -rf notes/             # same, overwriting existing .md files
-notes4ai -r -f notes/           # equivalent long form
+md4ai -r notes/              # every .pdf/.docx/.pptx under notes/, in place
+md4ai -rf notes/             # same, overwriting existing .md files
+md4ai -r -f notes/           # equivalent long form
 
-notes4ai -o b.md a.pdf          # write exactly b.md
-notes4ai -o out/ a.pdf          # write out/a.pdf.md (creates out/)
-notes4ai -o out/ -r notes/      # preserve notes/'s structure under out/
+md4ai -o b.md a.pdf          # write exactly b.md
+md4ai -o out/ a.pdf          # write out/a.pdf.md (creates out/)
+md4ai -o out/ -r notes/      # preserve notes/'s structure under out/
 ```
 
 If an output file already exists, the command **refuses to run** unless
@@ -130,12 +131,12 @@ a directory. A directory is created if needed.
 
 ### Clipboard mode
 
-`cp2ai` uses the same conversion pipeline but writes the result to the macOS
-clipboard instead of files. It accepts one or more files and does not support
-directories:
+The `cp4ai` clipboard command uses the same conversion pipeline but writes the
+result to the macOS clipboard instead of files. It accepts one or more files
+and does not support directories:
 
 ```bash
-cp2ai a.pdf b.docx c.pptx
+cp4ai a.pdf b.docx c.pptx
 ```
 
 Each document is wrapped with its filename (without directories):
@@ -154,7 +155,7 @@ Each document is wrapped with its filename (without directories):
 [c.pptx END]
 ```
 
-`cp2ai` accepts only `--tesseract`, `--no-ocr` and `--jobs N`. If any file
+`cp4ai` accepts only `--tesseract`, `--no-ocr` and `--jobs N`. If any file
 fails, the clipboard is left unchanged. On success it reports the clipboard
 size and the GPT-4 token count:
 
