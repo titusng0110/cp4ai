@@ -1,14 +1,10 @@
-# Source notes — never commit private or copyrighted material
-/src/*
-!/src/.gitkeep
-
-# Generated Markdown output
-/md/
-
-# Python environment and caches
+# Python environment and build artifacts
 /.venv/
 __pycache__/
 *.py[cod]
+/build/
+/dist/
+*.egg-info/
 
 # Temporary files and logs
 /tmp/

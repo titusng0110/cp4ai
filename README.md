@@ -1,7 +1,5 @@
 # notes4ai
 
-## Intro
-
 `notes4ai` converts law notes — cases, statutes, lecture outlines, problem sets
 and exam frameworks — from `.docx` and `.pdf` into Markdown for downstream LLM
 ingestion.
@@ -18,91 +16,94 @@ LLM can interpret them; silently dropping a point is not recoverable.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
 - OCR defaults to Apple's Live Text via `ocrmac`; `--tesseract` switches to
   Tesseract. Transparent images are flattened onto white before OCR.
-- `md/` mirrors `src/` and includes a generated index.
-- Watermark text and short fragments from the native text layer are kept; OCR
-  from images that yields fewer than 10 non-space characters is dropped as
-  decorative.
+- Output is `<source>.pdf.md` or `<source>.docx.md`, so it never collides with
+  the input file.
 
 Released under the MIT License.
 
-## Setup
+## Install
 
-Requires macOS, [Homebrew](https://brew.sh) and
-[uv](https://docs.astral.sh/uv/).
+Requirements: **macOS**, [Homebrew](https://brew.sh) and
+[uv](https://docs.astral.sh/uv/). Python itself is installed by `uv`.
 
 ```bash
-git clone <your-remote-url> notes4ai
+git clone https://github.com/titusng0110/notes4ai.git
 cd notes4ai
-
-brew bundle
-./tools/setup_tessdata.sh
-uv sync
+uv tool install .
 ```
 
-`tools/tessdata/` already contains `eng.traineddata` and the TSV config, so
-setup normally needs no downloads.
+This installs the `notes4ai` command. If the command is not found, run
+`uv tool update-shell` and restart the terminal (or add `~/.local/bin` to
+`PATH`). On first use it checks for
+`tesseract`, `emf2svg-conv` and `rsvg-convert`; if any are missing it runs
+`brew install` for them. Homebrew installs into a user-writable prefix on
+Apple Silicon, so no `sudo` is normally needed.
+
+To skip that automatic check:
+
+```bash
+NOTES4AI_SKIP_SETUP=1 notes4ai ...
+```
+
+For development, `uv sync` installs the package in editable mode and
+`uv run notes4ai` runs it without installing globally. After pulling changes,
+refresh the installed tool with `uv tool install --force .`.
 
 ### Installed packages
 
 - Python 3.13
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
   `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`, `pillow 13.0.0`
-- Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4_1`, `tesseract 5.5.4`
-- Tesseract data: `eng.traineddata`, `configs/tsv`
+- Homebrew packages: `libemf2svg`, `librsvg`, `tesseract`
 
 ## Usage
 
 ```bash
-# Put notes in src/, then convert them
-cp -R ~/Downloads/my-notes/. src/
-uv run python convert_to_md.py
+notes4ai a.pdf                  # writes a.pdf.md next to a.pdf
+notes4ai a.docx                 # writes a.docx.md next to a.docx
+
+notes4ai -r notes/              # every .pdf/.docx under notes/, in place
+notes4ai -rf notes/             # same, overwriting existing .md files
+notes4ai -r -f notes/           # equivalent long form
+
+notes4ai -o b.md a.pdf          # write exactly b.md
+notes4ai -o out/ a.pdf          # write out/a.pdf.md (creates out/)
+notes4ai -o out/ -r notes/      # preserve notes/'s structure under out/
 ```
 
-Output:
+If an output file already exists, the command **refuses to run** unless
+`-f/--force` is given. For a recursive run it checks all destinations first,
+so it will not partially convert a directory and then stop.
 
-```text
-md/
-├── README.md             # generated index
-├── Notes/...
-├── Exam/...
-└── ...
-```
+`--out` is treated as a file when it ends in `.md`; otherwise it is treated as
+a directory. A directory is created if needed.
 
-Common options:
+### Options
 
-```bash
-uv run python convert_to_md.py --force          # reconvert everything
-uv run python convert_to_md.py --only "Lecture 4"
-uv run python convert_to_md.py --livetext       # default: Apple Live Text
-uv run python convert_to_md.py --tesseract      # use Tesseract instead
-uv run python convert_to_md.py --no-ocr         # skip image text
-uv run python convert_to_md.py --jobs 4         # worker processes
-uv run python convert_to_md.py --src path/to/src --out path/to/md
-```
+| Option | Meaning |
+|---|---|
+| `-r`, `--recursive` | Convert every `.docx`/`.pdf` under a directory |
+| `-f`, `--force` | Overwrite existing output |
+| `-o`, `--out` | Output file, or output directory preserving structure |
+| `--jobs N` | Parallel worker processes (default: CPU cores) |
+| `--livetext` | Apple Live Text via `ocrmac` (default) |
+| `--tesseract` | Use Tesseract instead of Live Text |
+| `--no-ocr` | Do not OCR images |
+| `--version` | Show version |
 
-Without `--force`, existing Markdown is skipped. Failed documents do not stop
-the batch; failures are summarised at the end. A partial `--only` run does not
-rebuild the library index.
-
-Live Text is the default and requires macOS Sonoma or later. It is usually
-more accurate on printed English than Tesseract, but its line ordering can be
-less faithful in multi-column forms. Transparent images are flattened onto
-white before recognition. `--tesseract` requires the Homebrew binary and uses
-four page-segmentation modes for every image.
+`-rf` and `-r -f` are equivalent. Directory inputs require `-r`.
 
 ## Design / Algorithm
 
 ### Pipeline
 
 ```text
-src/ (.docx/.pdf)
-  -> one worker per document
-  -> md/ (mirrored paths + index)
+a.pdf  -> a.pdf.md
+notes/ -> notes/**/*.pdf.md, notes/**/*.docx.md
 ```
 
-Documents are independent. Each worker writes only its own Markdown file and
-uses its own temporary directory. The index is written once by the parent
-process after all workers finish.
+Documents are independent. Each file is converted in its own temporary
+directory, and `--jobs` controls how many run in parallel.
 
 ### DOCX
 
@@ -150,7 +151,7 @@ configured engine.
 `ocrmac`, with English (`en-US`) preferred. It is usually more accurate than
 Tesseract on printed English and keeps clause numbers with their text, but
 column order in forms and tables can be less faithful. It performs one
-recognition pass per image rather than the four Tesseract passes. Transparent
+recognition pass per image rather than four Tesseract passes. Transparent
 images are flattened onto white first, because Live Text otherwise returns
 nothing for RGBA images with an alpha background.
 
@@ -184,8 +185,7 @@ SHA-256 of the rendered pixels.
 ### Parallelism
 
 The default worker count is the number of CPU cores; use `--jobs N` to change
-it. Tesseract is limited to one thread per worker, so the workload stays within
-the requested process count.
+it. Tesseract is limited to one thread per worker.
 
 ### Design choices
 
@@ -202,4 +202,4 @@ the requested process count.
   for bit-identical rendered regions.
 - DOCX comments sit next to the passage they annotate so their context survives
   conversion; only unanchored comments fall back to an appendix.
-- No image files are copied into `md/`.
+- No image files are copied into the Markdown.

@@ -1,7 +1,7 @@
 """Convert DOCX and PDF study material into AI-friendly Markdown.
 
-What this script guarantees
----------------------------
+What this package guarantees
+----------------------------
 * It never summarizes or truncates the source text.
 * DOCX files go through Pandoc, so headings, lists, tables, footnotes, text
   boxes and tracked changes survive.
@@ -25,14 +25,13 @@ What this script guarantees
 
 Usage
 -----
-    uv sync
-    uv run python convert_to_md.py
-    uv run python convert_to_md.py --force
-    uv run python convert_to_md.py --only "Lecture 4"
-    uv run python convert_to_md.py --jobs 4
-    uv run python convert_to_md.py --livetext    (default)
-    uv run python convert_to_md.py --tesseract   (Tesseract)
-    uv run python convert_to_md.py --no-ocr
+    uv tool install .
+    notes4ai a.pdf
+    notes4ai -r notes/
+    notes4ai -rf notes/
+    notes4ai -o out/ -r notes/
+    notes4ai --tesseract a.pdf
+    notes4ai --no-ocr a.pdf
 
 Reproducible environment
 ------------------------
@@ -45,12 +44,10 @@ Reproducible environment
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
     pillow==13.0.0
     Tesseract 5.5.4              (brew install tesseract)
-    eng.traineddata in tools/tessdata
 """
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import html
 import json
@@ -59,11 +56,9 @@ import re
 import shutil
 import struct
 import subprocess
-import sys
 import tempfile
 import zipfile
 from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
@@ -72,13 +67,22 @@ from xml.etree import ElementTree as ET
 
 import numpy as np
 import pymupdf
+
+pymupdf.no_recommend_layout()
+
 import pymupdf4llm
 import pypandoc
 
-ROOT = Path(__file__).resolve().parent
-DEFAULT_SRC = ROOT / "src"
-DEFAULT_OUT = ROOT / "md"
-TESSDATA_DIR = ROOT / "tools" / "tessdata"
+PACKAGE_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = PACKAGE_DIR.parents[1] if len(PACKAGE_DIR.parents) > 1 else PACKAGE_DIR
+TESSDATA_DIR = next(
+    (
+        candidate
+        for candidate in (_REPO_ROOT / "tools" / "tessdata", PACKAGE_DIR / "tessdata")
+        if (candidate / "eng.traineddata").exists()
+    ),
+    None,
+)
 
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 LIGATURES = {
@@ -131,9 +135,9 @@ def md_title(path: Path) -> str:
 
 
 def display_path(path: Path) -> str:
-    """Prefer a project-relative path so the Markdown stays portable."""
+    """Prefer a working-directory-relative path so the Markdown stays portable."""
     try:
-        return path.resolve().relative_to(ROOT).as_posix()
+        return path.resolve().relative_to(Path.cwd()).as_posix()
     except ValueError:
         return path.as_posix()
 
@@ -421,6 +425,8 @@ DEFAULT_OCR_ENGINE = "livetext"
 
 
 def ocr_engine_label(engine: str) -> str:
+    if engine == "none":
+        return "disabled"
     if engine == "livetext":
         languages = ", ".join(OCR_LIVETEXT_LANGS)
         return f"ocrmac livetext ({languages})"
@@ -738,6 +744,7 @@ def replace_docx_images(
     tessdata_dir: Path | None,
     cache: dict[tuple, str],
     engine: str = DEFAULT_OCR_ENGINE,
+    use_ocr: bool = True,
 ) -> tuple[str, list[Path], set[Path]]:
     """Replace every DOCX image link or ``<img>`` tag with its OCR text."""
     failed_vectors: list[Path] = []
@@ -753,6 +760,8 @@ def replace_docx_images(
 
         counter += 1
         referenced.add(image_path)
+        if not use_ocr:
+            return "", label, f"<!-- image omitted: {label} (OCR disabled) -->"
         text = ocr_image_file(image_path, workdir, counter, tessdata_dir, cache, engine)
         if text and useful_ocr(text):
             return text, label, None
@@ -823,6 +832,7 @@ def figures_section(
     tessdata_dir: Path | None,
     cache: dict[tuple, str],
     engine: str = DEFAULT_OCR_ENGINE,
+    use_ocr: bool = True,
 ) -> tuple[str, int, list[Path]]:
     """OCR images that Pandoc extracted but could not place in the body.
 
@@ -830,6 +840,8 @@ def figures_section(
     produce a Markdown image link. They often contain the most important
     diagrams in the document, so none may be dropped.
     """
+    if not use_ocr:
+        return "", 0, []
     image_suffixes = {
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp",
         ".emf", ".wmf", ".svg",
@@ -888,6 +900,7 @@ def convert_docx(
     out_path: Path,
     tessdata_dir: Path | None,
     engine: str = DEFAULT_OCR_ENGINE,
+    use_ocr: bool = True,
 ) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="notes4ai_docx_") as tmp:
@@ -912,10 +925,10 @@ def convert_docx(
         media_dir = workdir / "media"
         ocr_cache: dict[tuple, str] = {}
         body, failed_vectors, referenced = replace_docx_images(
-            proc.stdout.strip(), media_dir, workdir, tessdata_dir, ocr_cache, engine
+            proc.stdout.strip(), media_dir, workdir, tessdata_dir, ocr_cache, engine, use_ocr
         )
         figures, figure_count, more_failed = figures_section(
-            media_dir, referenced, workdir, tessdata_dir, ocr_cache, engine
+            media_dir, referenced, workdir, tessdata_dir, ocr_cache, engine, use_ocr
         )
         vector_files = sorted(set(failed_vectors + more_failed), key=natural_key)
         header = extract_docx_header(path)
@@ -1096,268 +1109,3 @@ def convert_pdf(
     )
     write_markdown(out_path, f"{header}\n\n# {md_title(path)}\n\n" + "\n\n".join(parts))
     return f"pdf, {len(chunks)} pages, OCR on {ocr_pages} page(s)"
-
-
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
-
-
-def find_sources(src: Path) -> list[Path]:
-    files = [
-        p
-        for p in src.rglob("*")
-        if p.is_file() and p.suffix.lower() in {".docx", ".pdf"} and not p.name.startswith("~$")
-    ]
-    return sorted(files, key=lambda p: p.as_posix().lower())
-
-
-def build_index(
-    out_dir: Path,
-    src_root: Path,
-    rows: list[tuple[Path, Path, str]],
-    engine: str = DEFAULT_OCR_ENGINE,
-) -> None:
-    label = ocr_engine_label(engine)
-    lines = [
-        "# Source Library (Markdown)",
-        "",
-        f"Converted from `{display_path(src_root)}` on {date.today().isoformat()}.",
-        "",
-        "## Documents",
-        "",
-        "| Markdown | Source | Type | Details |",
-        "|---|---|---|---|",
-    ]
-    for md_path, src_path, details in rows:
-        rel_md = md_path.relative_to(out_dir).as_posix()
-        lines.append(
-            f"| [{rel_md}]({rel_md}) | `{display_path(src_path)}` | "
-            f"{src_path.suffix.lower().lstrip('.')} | {details} |"
-        )
-    notes = [
-        (
-            "- **DOCX:** Pandoc 3.9 (via pypandoc 1.17) to GitHub-flavored Markdown. "
-            "Headings, lists, tables, footnotes, text boxes and tracked changes are "
-            "preserved. Every raster image is passed through OCR with "
-            f"{label} and its text is inserted at the image's position where detected; "
-            "image files are not copied into the Markdown. DOCX comments are "
-            "inserted next to the passage they annotate, with author and date; "
-            "comments without a visible anchor are listed in an appendix. EMF+ "
-            "bitmaps are extracted from the EMF record and OCR'd; classic EMF/SVG "
-            "are rasterised with libemf2svg + librsvg. Only failures are listed in "
-            "a short note at the end of the file."
-        ),
-        (
-            "- **PDF:** PyMuPDF4LLM 0.3.4 preserves the digital text layer and page "
-            "order. Pages are delimited with `<!-- page N of M -->` comments. Text "
-            "that exists only inside embedded images (screenshots, table fragments, "
-            f"diagrams) is OCR'd with {label}, marked with "
-            "`<!-- OCR text ... -->`, and may contain recognition errors."
-        ),
-        (
-            "- Nothing was summarized, shortened, or deliberately omitted. Blank pages "
-            "are kept as page markers so page references remain accurate."
-        ),
-    ]
-    lines.extend(["", "## Conversion notes", "", *notes])
-    (out_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def output_path(source: Path, src_root: Path, out_root: Path) -> Path:
-    """Mirror a source path under the output directory."""
-    rel = source.relative_to(src_root)
-    name = re.sub(r"\s+", " ", source.stem).strip() + ".md"
-    return out_root / rel.parent / name
-
-
-class ConversionResult(NamedTuple):
-    out_path: Path
-    details: str | None
-    error: str | None
-
-
-def convert_one(
-    source: Path,
-    src_root: Path,
-    out_root: Path,
-    use_ocr: bool,
-    tessdata_dir: Path,
-    engine: str = DEFAULT_OCR_ENGINE,
-) -> ConversionResult:
-    """Convert one document. Each worker writes only its own output file."""
-    out_path = output_path(source, src_root, out_root)
-    try:
-        if source.suffix.lower() == ".docx":
-            details = convert_docx(source, out_path, tessdata_dir, engine)
-        else:
-            details = convert_pdf(source, out_path, use_ocr, tessdata_dir, engine)
-        return ConversionResult(out_path, details, None)
-    except Exception as exc:  # noqa: BLE001 - report and continue the batch
-        return ConversionResult(out_path, None, f"{type(exc).__name__}: {exc}")
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--src", type=Path, default=DEFAULT_SRC, help="Source directory")
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output directory")
-    parser.add_argument("--force", action="store_true", help="Overwrite existing Markdown")
-    engine_group = parser.add_mutually_exclusive_group()
-    engine_group.add_argument(
-        "--tesseract",
-        dest="ocr_engine",
-        action="store_const",
-        const="tesseract",
-        help="OCR with Tesseract instead of the default Live Text",
-    )
-    engine_group.add_argument(
-        "--livetext",
-        dest="ocr_engine",
-        action="store_const",
-        const="livetext",
-        help="OCR with Apple Live Text via ocrmac (default; macOS Sonoma or later)",
-    )
-    engine_group.add_argument(
-        "--no-ocr",
-        dest="ocr_engine",
-        action="store_const",
-        const="none",
-        help="Disable OCR",
-    )
-    parser.set_defaults(ocr_engine=DEFAULT_OCR_ENGINE)
-    parser.add_argument("--only", default=None, help="Only convert paths containing this text")
-    parser.add_argument(
-        "--jobs",
-        type=int,
-        default=os.cpu_count() or 1,
-        help="Parallel worker processes (default: CPU cores)",
-    )
-    args = parser.parse_args()
-    use_ocr = args.ocr_engine != "none"
-
-    if use_ocr and args.ocr_engine == "tesseract" and not shutil.which("tesseract"):
-        print("ERROR: tesseract is not installed. Run: brew install tesseract", file=sys.stderr)
-        return 1
-    if use_ocr and args.ocr_engine == "livetext":
-        if sys.platform != "darwin":
-            print("ERROR: --livetext requires macOS.", file=sys.stderr)
-            return 1
-        try:
-            import ocrmac  # noqa: F401
-        except ImportError:
-            print(
-                "ERROR: ocrmac is not installed. Run: uv sync (or pip install ocrmac)",
-                file=sys.stderr,
-            )
-            return 1
-
-    src_root = args.src.resolve()
-    args.out.mkdir(parents=True, exist_ok=True)
-    out_root = args.out.resolve()
-
-    sources = find_sources(src_root)
-    if args.only:
-        needle = args.only.lower()
-        sources = [p for p in sources if needle in p.as_posix().lower()]
-    if not sources:
-        print("No DOCX or PDF files found.")
-        return 1
-
-    paths: dict[Path, Path] = {}
-    for source in sources:
-        path = output_path(source, src_root, out_root)
-        if path in paths:
-            print(
-                f"ERROR: {source} and {paths[path]} both map to {path}",
-                file=sys.stderr,
-            )
-            return 1
-        paths[source] = path
-
-    rows_by_source: dict[Path, tuple[Path, Path, str]] = {}
-    failures_by_source: dict[Path, str] = {}
-    pending: list[Path] = []
-    for source in sources:
-        path = paths[source]
-        if path.exists() and not args.force:
-            print(f"skip (exists): {source.relative_to(src_root)}")
-            rows_by_source[source] = (path, source, "existing")
-        else:
-            pending.append(source)
-
-    jobs = max(1, args.jobs)
-
-    def record(source: Path, result: ConversionResult, done: int) -> None:
-        rel = source.relative_to(src_root)
-        if result.error:
-            failures_by_source[source] = result.error
-            print(f"[{done}/{len(pending)}] FAILED {rel}: {result.error}", file=sys.stderr)
-            return
-        rows_by_source[source] = (result.out_path, source, result.details or "")
-        print(
-            f"[{done}/{len(pending)}] {rel} -> "
-            f"{result.out_path.relative_to(out_root)} ({result.details})"
-        )
-
-    if pending and jobs == 1:
-        for done, source in enumerate(pending, start=1):
-            result = convert_one(
-                source,
-                src_root,
-                out_root,
-                use_ocr,
-                TESSDATA_DIR,
-                args.ocr_engine,
-            )
-            record(source, result, done)
-    elif pending:
-        workers = min(jobs, len(pending))
-        print(f"Converting {len(pending)} file(s) with {workers} worker process(es) …", flush=True)
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(
-                    convert_one,
-                    source,
-                    src_root,
-                    out_root,
-                    use_ocr,
-                    TESSDATA_DIR,
-                    args.ocr_engine,
-                ): source
-                for source in pending
-            }
-            for done, future in enumerate(as_completed(futures), start=1):
-                source = futures[future]
-                try:
-                    result = future.result()
-                except Exception as exc:  # noqa: BLE001 - report and continue the batch
-                    result = ConversionResult(
-                        output_path(source, src_root, out_root),
-                        None,
-                        f"{type(exc).__name__}: {exc}",
-                    )
-                record(source, result, done)
-
-    rows = [rows_by_source[source] for source in sources if source in rows_by_source]
-    failures = [
-        (source, failures_by_source[source]) for source in sources if source in failures_by_source
-    ]
-
-    # A partial run must not replace the library-wide index with one row.
-    if args.only:
-        print("Index not rebuilt (partial --only run).")
-    else:
-        build_index(out_root, src_root, rows, args.ocr_engine)
-
-    converted = sum(1 for _, _, details in rows if details != "existing")
-    print(f"\nConverted {converted} file(s) into {out_root}")
-    if failures:
-        print(f"{len(failures)} failure(s):", file=sys.stderr)
-        for source, message in failures:
-            print(f"  - {source}: {message}", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
