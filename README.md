@@ -18,6 +18,8 @@ LLM can interpret them; silently dropping a point is not recoverable.
 - `md/` mirrors `src/` and includes a generated index.
 - Watermarks and short OCR fragments are kept rather than filtered out.
 
+Released under the MIT License.
+
 ## Setup
 
 Requires macOS, [Homebrew](https://brew.sh) and
