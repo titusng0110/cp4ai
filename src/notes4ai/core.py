@@ -1,4 +1,4 @@
-"""Convert DOCX and PDF study material into AI-friendly Markdown.
+"""Convert DOCX, PDF and PPTX study material into AI-friendly Markdown.
 
 What this package guarantees
 ----------------------------
@@ -18,6 +18,9 @@ What this package guarantees
 * DOCX comments are inserted next to the passage they annotate, with author
   and date; comments without a visible anchor go into an appendix. Pandoc
   preserves the anchors as ``comment-start``/``comment-end`` spans.
+* PPTX slides are marked ``<!-- slide N of M -->``; speaker notes and comments
+  are appended at the end of each slide. PPTX image OCR has no minimum-length
+  filter and includes shape coordinates when available.
 * A few DOCX files contain EMF/vector drawings. EMF+ bitmaps are extracted
   directly from the EMF record and OCR'd; classic EMF/SVG are rasterised with
   libemf2svg + librsvg. Only images that still fail are listed in a short
@@ -27,6 +30,7 @@ Usage
 -----
     uv tool install .
     notes4ai a.pdf
+    notes4ai a.pptx
     notes4ai -r notes/
     notes4ai -rf notes/
     notes4ai -o out/ -r notes/
@@ -53,6 +57,7 @@ import hashlib
 import html
 import json
 import os
+import posixpath
 import re
 import shutil
 import struct
@@ -86,6 +91,10 @@ TESSDATA_DIR = next(
 )
 
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+P_NS = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 LIGATURES = {
     "\ufb00": "ff",
     "\ufb01": "fi",
@@ -94,6 +103,7 @@ LIGATURES = {
     "\ufb04": "ffl",
 }
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+PPTX_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)')
 HTML_IMG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
 HTML_IMG_SRC_RE = re.compile(
     r"""\bsrc\s*=\s*(["'])(.*?)\1""", re.IGNORECASE | re.DOTALL
@@ -964,6 +974,341 @@ def convert_docx(
     return (
         f"docx, {len(comments)} comment(s), {figure_count} floating figure(s), "
         f"{len(vector_files)} vector image(s) not OCR'd"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PPTX conversion
+# ---------------------------------------------------------------------------
+
+
+def _pptx_rels(zf: zipfile.ZipFile, part: str) -> dict[str, tuple[str, str]]:
+    """Return rId -> (relationship type, absolute part name)."""
+    rels_name = posixpath.join(
+        posixpath.dirname(part), "_rels", posixpath.basename(part) + ".rels"
+    )
+    if rels_name not in zf.namelist():
+        return {}
+    root = ET.fromstring(zf.read(rels_name))
+    rels: dict[str, tuple[str, str]] = {}
+    base = posixpath.dirname(part)
+    for rel in root.findall(REL_NS + "Relationship"):
+        rel_id = rel.get("Id")
+        target = rel.get("Target")
+        if not rel_id or not target:
+            continue
+        if target.startswith("/"):
+            resolved = target.lstrip("/")
+        else:
+            resolved = posixpath.normpath(posixpath.join(base, target))
+        rels[rel_id] = (rel.get("Type", ""), resolved)
+    return rels
+
+
+def _pptx_slide_parts(zf: zipfile.ZipFile) -> list[str]:
+    presentation = ET.fromstring(zf.read("ppt/presentation.xml"))
+    rels = _pptx_rels(zf, "ppt/presentation.xml")
+    parts: list[str] = []
+    for slide_id in presentation.iter(P_NS + "sldId"):
+        rel_id = slide_id.get(R_NS + "id")
+        if rel_id in rels:
+            parts.append(rels[rel_id][1])
+    return parts
+
+
+def _pptx_authors(zf: zipfile.ZipFile) -> dict[str, str]:
+    if "ppt/commentAuthors.xml" not in zf.namelist():
+        return {}
+    root = ET.fromstring(zf.read("ppt/commentAuthors.xml"))
+    return {
+        author.get("id", ""): author.get("name", "Unknown")
+        for author in root.iter(P_NS + "cmAuthor")
+    }
+
+
+def _pptx_notes_text(zf: zipfile.ZipFile, slide_part: str) -> str:
+    rels = _pptx_rels(zf, slide_part)
+    notes_part = next(
+        (target for kind, target in rels.values() if kind.endswith("/notesSlide")),
+        None,
+    )
+    if not notes_part or notes_part not in zf.namelist():
+        return ""
+    root = ET.fromstring(zf.read(notes_part))
+    lines: list[str] = []
+    for shape in root.iter(P_NS + "sp"):
+        placeholder = shape.find(f"{P_NS}nvSpPr/{P_NS}nvPr/{P_NS}ph")
+        if placeholder is not None and placeholder.get("type") != "body":
+            continue
+        text_body = shape.find(P_NS + "txBody")
+        if text_body is None:
+            continue
+        for paragraph in text_body.iter(A_NS + "p"):
+            text = "".join(node.text or "" for node in paragraph.iter(A_NS + "t")).strip()
+            if text:
+                lines.append(text)
+    notes = "\n".join(lines).strip()
+    if notes in {"-", "Click to add notes"}:
+        return ""
+    return notes
+
+
+def _pptx_comments(zf: zipfile.ZipFile, slide_part: str) -> list[dict[str, str]]:
+    rels = _pptx_rels(zf, slide_part)
+    comments_part = next(
+        (target for kind, target in rels.values() if kind.endswith("/comments")),
+        None,
+    )
+    if not comments_part or comments_part not in zf.namelist():
+        return []
+    root = ET.fromstring(zf.read(comments_part))
+    authors = _pptx_authors(zf)
+    comments: list[dict[str, str]] = []
+    for node in root.iter(P_NS + "cm"):
+        text_node = node.find(P_NS + "text")
+        if text_node is not None:
+            text = "".join(text_node.itertext()).strip()
+        else:
+            text = "".join(t.text or "" for t in node.iter(A_NS + "t")).strip()
+        if not text:
+            continue
+        comments.append(
+            {
+                "author": authors.get(node.get("authorId", ""), "Unknown"),
+                "date": (node.get("dt") or "")[:10],
+                "text": text,
+            }
+        )
+    return comments
+
+
+def _pptx_images(zf: zipfile.ZipFile, slide_part: str) -> dict[str, tuple[int, int, int, int]]:
+    rels = _pptx_rels(zf, slide_part)
+    root = ET.fromstring(zf.read(slide_part))
+    images: dict[str, tuple[int, int, int, int]] = {}
+    for picture in root.iter(P_NS + "pic"):
+        name_node = picture.find(f"{P_NS}nvPicPr/{P_NS}cNvPr")
+        shape_name = name_node.get("name", "") if name_node is not None else ""
+        xfrm = picture.find(f"{P_NS}spPr/{A_NS}xfrm")
+        if xfrm is None:
+            continue
+        offset = xfrm.find(A_NS + "off")
+        extent = xfrm.find(A_NS + "ext")
+        if offset is None or extent is None:
+            continue
+        try:
+            coords = (
+                int(offset.get("x", "0")),
+                int(offset.get("y", "0")),
+                int(extent.get("cx", "0")),
+                int(extent.get("cy", "0")),
+            )
+        except ValueError:
+            continue
+        if shape_name:
+            images[shape_name] = coords
+        blip = picture.find(f"{P_NS}blipFill/{A_NS}blip")
+        if blip is not None:
+            rel_id = blip.get(R_NS + "embed")
+            if rel_id in rels:
+                images[posixpath.basename(rels[rel_id][1])] = coords
+    return images
+
+
+def _pptx_metadata(path: Path) -> list[dict[str, object]]:
+    with zipfile.ZipFile(path) as zf:
+        return [
+            {
+                "notes": _pptx_notes_text(zf, part),
+                "comments": _pptx_comments(zf, part),
+                "images": _pptx_images(zf, part),
+            }
+            for part in _pptx_slide_parts(zf)
+        ]
+
+
+def _pptx_coords(coords: tuple[int, int, int, int] | None) -> str:
+    if not coords:
+        return ""
+    x, y, width, height = coords
+    return f"x={x}, y={y}, w={width}, h={height} (EMU)"
+
+
+def _replace_pptx_images(
+    markdown: str,
+    media_dir: Path,
+    workdir: Path,
+    tessdata_dir: Path | None,
+    cache: dict[tuple, str],
+    engine: str,
+    use_ocr: bool,
+    image_coords: dict[str, tuple[int, int, int, int]],
+) -> str:
+    counter = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal counter
+        alt = match.group(1).strip()
+        source = match.group(2).strip()
+        title = (match.group(3) or "").strip()
+        image_path = resolve_docx_media(source, media_dir, workdir)
+        label = title or alt or Path(source).name
+        coords = image_coords.get(title) or image_coords.get(Path(source).name)
+        coordinate_text = _pptx_coords(coords)
+
+        if not image_path.exists():
+            note = f"<!-- image not extracted: {label} -->"
+            text = ""
+        elif not use_ocr:
+            note = f"<!-- image omitted: {label} (OCR disabled) -->"
+            text = ""
+        else:
+            counter += 1
+            text = ocr_image_file(
+                image_path, workdir, counter, tessdata_dir, cache, engine
+            )
+            note = "" if text.strip() else f"<!-- image omitted: {label} (no readable text detected) -->"
+
+        line_start = markdown.rfind("\n", 0, match.start()) + 1
+        line_end = markdown.find("\n", match.end())
+        line = markdown[line_start : line_end if line_end != -1 else len(markdown)]
+
+        coords_suffix = ""
+        if coordinate_text:
+            coords_suffix = f"<br>**Coordinates:** {coordinate_text}"
+        if line.lstrip().startswith("|"):
+            parts = []
+            if text:
+                parts.append(f"<br>**Image text (OCR) — {label}:** {text.replace('|', '\\|').replace(chr(10), '<br>')}")
+            if note:
+                parts.append(note)
+            if coords_suffix:
+                parts.append(coords_suffix)
+            return "".join(parts)
+
+        pieces: list[str] = []
+        if text:
+            pieces.append(ocr_blockquote(text, label))
+        if note:
+            pieces.append(note)
+        if coordinate_text:
+            pieces.append(f"- **Coordinates:** {coordinate_text}")
+        if not pieces:
+            return f"<!-- image omitted: {label} -->"
+        return "\n\n" + "\n\n".join(pieces) + "\n\n"
+
+    return PPTX_IMAGE_RE.sub(repl, markdown)
+
+
+def _append_pptx_slide_meta(chunk: str, meta: dict[str, object]) -> str:
+    pieces = [chunk.rstrip()]
+    notes = str(meta.get("notes", "")).strip()
+    if notes:
+        pieces.extend(["", "### Speaker notes", ""])
+        pieces.extend(f"> {line}" if line.strip() else ">" for line in notes.splitlines())
+
+    comments = meta.get("comments", [])
+    if comments:
+        pieces.extend(["", "### Comments", ""])
+        for index, comment in enumerate(comments):
+            if index:
+                pieces.append("")
+            pieces.append(f"> **{comment['author']} — {comment['date']}**")
+            pieces.append(">")
+            pieces.extend(
+                f"> {line}" if line.strip() else ">"
+                for line in comment["text"].splitlines()
+            )
+    return "\n".join(pieces).strip()
+
+
+def _split_pptx_slides(markdown: str) -> tuple[str, list[str]]:
+    matches = list(re.finditer(r"(?m)^## ", markdown))
+    if not matches:
+        return "", [markdown.strip()] if markdown.strip() else []
+    preamble = markdown[: matches[0].start()].strip()
+    chunks: list[str] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+        chunks.append(markdown[match.start() : end].strip())
+    return preamble, chunks
+
+
+def convert_pptx(
+    path: Path,
+    out_path: Path,
+    tessdata_dir: Path | None,
+    engine: str = DEFAULT_OCR_ENGINE,
+    use_ocr: bool = True,
+) -> str:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = _pptx_metadata(path)
+    with tempfile.TemporaryDirectory(prefix="notes4ai_pptx_") as tmp:
+        workdir = Path(tmp)
+        pandoc = pypandoc.get_pandoc_path()
+        proc = subprocess.run(
+            [
+                pandoc,
+                str(path.resolve()),
+                "--from=pptx",
+                "--to=gfm",
+                "--wrap=none",
+                "--markdown-headings=atx",
+                "--extract-media=media",
+            ],
+            check=False,
+            cwd=workdir,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Pandoc failed for {path}:\n{proc.stderr}")
+
+        media_dir = workdir / "media"
+        ocr_cache: dict[tuple, str] = {}
+        preamble, chunks = _split_pptx_slides(proc.stdout.strip())
+        if preamble and chunks:
+            chunks[0] = preamble + "\n\n" + chunks[0]
+        elif preamble:
+            chunks = [preamble]
+
+        total = max(len(chunks), len(metadata))
+        rendered: list[str] = []
+        for index in range(total):
+            chunk = chunks[index] if index < len(chunks) else ""
+            meta = metadata[index] if index < len(metadata) else {}
+            image_coords = meta.get("images", {}) if meta else {}
+            chunk = _replace_pptx_images(
+                chunk,
+                media_dir,
+                workdir,
+                tessdata_dir,
+                ocr_cache,
+                engine,
+                use_ocr,
+                image_coords,
+            )
+            chunk = _append_pptx_slide_meta(chunk, meta)
+            body = f"<!-- slide {index + 1} of {total} -->"
+            if chunk:
+                body += f"\n\n{chunk}"
+            rendered.append(body)
+
+    notes_count = sum(1 for meta in metadata if str(meta.get("notes", "")).strip())
+    comments_count = sum(len(meta.get("comments", [])) for meta in metadata)
+    header = front_matter(
+        path,
+        "pptx",
+        converter="pandoc 3.9 (pypandoc 1.17)",
+        slides=len(metadata) or total,
+        notes=notes_count or None,
+        comments=comments_count or None,
+        images_ocr=ocr_engine_label(engine),
+    )
+    write_markdown(out_path, f"{header}\n\n# {md_title(path)}\n\n" + "\n\n".join(rendered))
+    return (
+        f"pptx, {len(metadata) or total} slide(s), {notes_count} note(s), "
+        f"{comments_count} comment(s)"
     )
 
 

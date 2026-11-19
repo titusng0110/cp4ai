@@ -1,8 +1,8 @@
 # notes4ai
 
 `notes4ai` converts law notes — cases, statutes, lecture outlines, problem sets
-and exam frameworks — from `.docx` and `.pdf` into Markdown for downstream LLM
-ingestion.
+and exam frameworks — from `.docx`, `.pdf` and `.pptx` into Markdown for
+downstream LLM ingestion.
 
 The pipeline is **recall-first**: every source word matters. OCR errors,
 duplicate text and imperfect formatting are acceptable because the downstream
@@ -13,11 +13,14 @@ LLM can interpret them; silently dropping a point is not recoverable.
 - DOCX comments are inserted next to the passage they annotate, with author
   and date; unanchored comments go into an appendix.
 - PDF page order and page boundaries are preserved.
-- PDF and DOCX images are OCR'd; image files are not copied into the output.
+- PPTX slides are delimited with `<!-- slide N of M -->`; speaker notes and
+  comments are appended at the end of each slide.
+- PDF, DOCX and PPTX images are OCR'd; image files are not copied into the
+  output. PPTX images also get their shape coordinates.
 - OCR defaults to Apple's Live Text via `ocrmac`; `--tesseract` switches to
   Tesseract. Transparent images are flattened onto white before OCR.
-- Output is `<source>.pdf.md` or `<source>.docx.md`, so it never collides with
-  the input file.
+- Output is `<source>.pdf.md`, `<source>.docx.md` or `<source>.pptx.md`, so it
+  never collides with the input file.
 
 Released under the MIT License.
 
@@ -92,8 +95,9 @@ Your Markdown files and the Homebrew packages remain installed.
 ```bash
 notes4ai a.pdf                  # writes a.pdf.md next to a.pdf
 notes4ai a.docx                 # writes a.docx.md next to a.docx
+notes4ai a.pptx                 # writes a.pptx.md next to a.pptx
 
-notes4ai -r notes/              # every .pdf/.docx under notes/, in place
+notes4ai -r notes/              # every .pdf/.docx/.pptx under notes/, in place
 notes4ai -rf notes/             # same, overwriting existing .md files
 notes4ai -r -f notes/           # equivalent long form
 
@@ -113,7 +117,7 @@ a directory. A directory is created if needed.
 
 | Option | Meaning |
 |---|---|
-| `-r`, `--recursive` | Convert every `.docx`/`.pdf` under a directory |
+| `-r`, `--recursive` | Convert every `.docx`/`.pdf`/`.pptx` under a directory |
 | `-f`, `--force` | Overwrite existing output |
 | `-o`, `--out` | Output file, or output directory preserving structure |
 | `--jobs N` | Parallel worker processes (default: CPU cores) |
@@ -131,7 +135,7 @@ clipboard instead of files. It accepts one or more files and does not support
 directories:
 
 ```bash
-cp2ai a.pdf b.docx
+cp2ai a.pdf b.docx c.pptx
 ```
 
 Each document is wrapped with its filename (without directories):
@@ -144,6 +148,10 @@ Each document is wrapped with its filename (without directories):
 [b.docx BEGIN]
 ...
 [b.docx END]
+
+[c.pptx BEGIN]
+...
+[c.pptx END]
 ```
 
 `cp2ai` accepts only `--tesseract`, `--no-ocr` and `--jobs N`. If any file
@@ -185,6 +193,20 @@ directory, and `--jobs` controls how many run in parallel.
    - classic EMF is converted with `emf2svg-conv`, then `rsvg-convert`;
    - SVG uses `rsvg-convert`.
 6. Images are kept in a temporary directory and deleted afterwards.
+
+### PPTX
+
+1. Pandoc converts each slide to GitHub-flavored Markdown; slide titles become
+   level-2 headings.
+2. Slides are delimited with `<!-- slide N of M -->`, matching the PDF page
+   marker style.
+3. Images are replaced by OCR text with no minimum-length filter. When the
+   PPTX stores a picture's position, its coordinates (`x`, `y`, `w`, `h` in
+   EMU) are appended next to the OCR text.
+4. Speaker notes are read from `notesSlide*.xml` and appended at the end of
+   their slide under `### Speaker notes`.
+5. PPTX comments are read from the slide relationships and appended at the end
+   of their slide under `### Comments`, with author and date.
 
 ### PDF
 

@@ -11,9 +11,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from . import __version__
-from .core import TESSDATA_DIR, convert_docx, convert_pdf
+from .core import TESSDATA_DIR, convert_docx, convert_pdf, convert_pptx
 
-SOURCE_SUFFIXES = {".docx", ".pdf"}
+SOURCE_SUFFIXES = {".docx", ".pdf", ".pptx"}
 HOMEBREW_COMMANDS = (
     ("emf2svg-conv", "libemf2svg"),
     ("rsvg-convert", "librsvg"),
@@ -40,7 +40,7 @@ def install_homebrew_dependencies(engine: str) -> None:
 def collect_sources(target: Path, recursive: bool) -> list[Path]:
     if target.is_file():
         if target.suffix.lower() not in SOURCE_SUFFIXES:
-            raise ValueError(f"unsupported file type: {target} (expected .docx or .pdf)")
+            raise ValueError(f"unsupported file type: {target} (expected .docx, .pdf or .pptx)")
         return [target]
     if target.is_dir():
         if not recursive:
@@ -113,6 +113,8 @@ def check_outputs(planned: list[tuple[Path, Path]], force: bool) -> None:
 def convert_one(source: Path, output: Path, use_ocr: bool, engine: str) -> str:
     if source.suffix.lower() == ".docx":
         return convert_docx(source, output, TESSDATA_DIR, engine, use_ocr)
+    if source.suffix.lower() == ".pptx":
+        return convert_pptx(source, output, TESSDATA_DIR, engine, use_ocr)
     return convert_pdf(source, output, use_ocr, TESSDATA_DIR, engine)
 
 
@@ -160,16 +162,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="notes4ai",
         description=(
-            "Convert DOCX and PDF files to recall-first Markdown. "
+            "Convert DOCX, PDF and PPTX files to recall-first Markdown. "
             "By default a.pdf becomes a.pdf.md next to it."
         ),
     )
-    parser.add_argument("target", type=Path, help=".docx/.pdf file, or a directory with -r")
+    parser.add_argument("target", type=Path, help=".docx/.pdf/.pptx file, or a directory with -r")
     parser.add_argument(
         "-r",
         "--recursive",
         action="store_true",
-        help="convert every .docx/.pdf under a directory",
+        help="convert every .docx/.pdf/.pptx under a directory",
     )
     parser.add_argument(
         "-f",

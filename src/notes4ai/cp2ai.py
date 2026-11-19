@@ -15,18 +15,18 @@ import tiktoken
 from .cli import convert_one, install_homebrew_dependencies
 from .core import DEFAULT_OCR_ENGINE
 
-SOURCE_SUFFIXES = {".docx", ".pdf"}
+SOURCE_SUFFIXES = {".docx", ".pdf", ".pptx"}
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cp2ai",
         description=(
-            "Convert DOCX/PDF files to Markdown and copy the concatenated "
+            "Convert DOCX/PDF/PPTX files to Markdown and copy the concatenated "
             "result to the clipboard."
         ),
     )
-    parser.add_argument("files", nargs="+", help=".docx/.pdf files")
+    parser.add_argument("files", nargs="+", help=".docx/.pdf/.pptx files")
     engines = parser.add_mutually_exclusive_group()
     engines.add_argument(
         "--tesseract",
