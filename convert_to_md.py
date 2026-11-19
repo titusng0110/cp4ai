@@ -745,7 +745,14 @@ def ocr_page_images(
             xrefs = sorted(
                 {xref for image_box, xref in image_boxes if image_box.intersects(box)}
             )
-            cache_key = (tuple(xrefs), round(box.width), round(box.height))
+            # The rendered clip includes the page's vector text, so a shared
+            # background image is not enough to make two pages' OCR identical.
+            cache_key = (
+                page_number,
+                tuple(xrefs),
+                round(box.width),
+                round(box.height),
+            )
             if cache_key in cache:
                 text = cache[cache_key]
             else:
