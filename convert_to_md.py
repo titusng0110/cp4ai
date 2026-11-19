@@ -36,7 +36,7 @@ Reproducible environment
     numpy==2.5.5
     tabulate==0.10.0
     Tesseract 5.5.4              (brew install tesseract)
-    eng.traineddata + chi_tra.traineddata in tools/tessdata
+    eng.traineddata in tools/tessdata
 """
 
 from __future__ import annotations
@@ -288,6 +288,7 @@ def comments_appendix(comments: list[dict[str, str]]) -> str:
 
 
 OCR_PSMS = (3, 4, 6, 11)
+OCR_LANG = "eng"
 
 
 class OcrResult(NamedTuple):
@@ -302,7 +303,7 @@ def tesseract_tsv(image: Path, psm: int, tessdata_dir: Path | None) -> OcrResult
     Confidence is weighted by word length, so a few long, low-confidence words
     cannot dominate the mean. No image preprocessing is applied.
     """
-    cmd = ["tesseract", str(image), "stdout", "-l", "eng+chi_tra", "--psm", str(psm), "tsv"]
+    cmd = ["tesseract", str(image), "stdout", "-l", OCR_LANG, "--psm", str(psm), "tsv"]
     if tessdata_dir and (tessdata_dir / "eng.traineddata").exists():
         cmd.extend(["--tessdata-dir", str(tessdata_dir)])
     env = dict(os.environ, OMP_THREAD_LIMIT="1")
@@ -683,7 +684,7 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
             converter="pandoc 3.9 (pypandoc 1.17)",
             header=header or None,
             comments=len(comments) if comments else None,
-            images_ocr="tesseract 5.5.4 eng+chi_tra",
+            images_ocr=f"tesseract 5.5.4 {OCR_LANG}",
         ),
         "",
         f"# {md_title(path)}",
@@ -836,7 +837,7 @@ def convert_pdf(
         pages=len(chunks),
         text_extraction="pymupdf4llm 0.3.4",
         images_ocr=(
-            f"tesseract 5.5.4 eng+chi_tra ({ocr_pages} page(s) with OCR text)"
+            f"tesseract 5.5.4 {OCR_LANG} ({ocr_pages} page(s) with OCR text)"
             if use_ocr
             else "disabled"
         ),
@@ -891,7 +892,7 @@ def build_index(out_dir: Path, rows: list[tuple[Path, Path, str]]) -> None:
             "- **PDF:** PyMuPDF4LLM 0.3.4 preserves the digital text layer and page "
             "order. Pages are delimited with `<!-- page N of M -->` comments. Text "
             "that exists only inside embedded images (screenshots, table fragments, "
-            "diagrams) is OCR'd with Tesseract 5.5.4 (`eng+chi_tra`), marked with "
+            f"diagrams) is OCR'd with Tesseract 5.5.4 (`{OCR_LANG}`), marked with "
             "`<!-- OCR text ... -->`, and may contain recognition errors."
         ),
         (

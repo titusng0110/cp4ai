@@ -62,17 +62,16 @@ uv sync                     # Python 3.13 environment
 
 ### Tesseract language data
 
-The language files are committed under `tools/tessdata/`, so a fresh clone
-normally needs no downloads:
+The English language file is committed under `tools/tessdata/`, so a fresh
+clone normally needs no downloads:
 
 | File | Purpose |
 |---|---|
 | `eng.traineddata` | English text |
-| `chi_tra.traineddata` | Traditional Chinese text |
 | `configs/tsv` | required for TSV confidence output with `--tessdata-dir` |
 
-`tools/setup_tessdata.sh` recreates all three from the Homebrew installation
-and the `tessdata_fast` repository if they are missing.
+`tools/setup_tessdata.sh` recreates both from the Homebrew installation if they
+are missing.
 
 ### Python and system dependencies
 
@@ -103,7 +102,7 @@ uv.lock              locked dependency versions
 Brewfile             Homebrew dependencies
 tools/
   setup_tessdata.sh
-  tessdata/          eng, chi_tra, configs/tsv
+  tessdata/          eng, configs/tsv
 src/                 input notes (gitignored)
 md/                  generated Markdown (gitignored)
 ```
@@ -317,7 +316,7 @@ final index build, which happens in the parent process.
 ### Shared OCR algorithm
 
 DOCX images and PDF page images call the same `ocr_image()` function. Tesseract
-runs with `eng+chi_tra` and no image preprocessing, once for each of four
+runs with `eng` and no image preprocessing, once for each of four
 page-segmentation modes:
 
 | PSM | Assumption | Good for |

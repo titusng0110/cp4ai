@@ -28,11 +28,4 @@ if [ ! -f "$DEST/configs/tsv" ]; then
     echo "copied configs/tsv"
 fi
 
-if [ ! -f "$DEST/chi_tra.traineddata" ]; then
-    curl -fsSL \
-        "https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_tra.traineddata" \
-        -o "$DEST/chi_tra.traineddata"
-    echo "downloaded chi_tra.traineddata"
-fi
-
 echo "Tesseract data ready in $DEST"
