@@ -134,20 +134,32 @@ are already present in this repository folder.
 
 ### OCR quality strategy
 
-The script does not trust a single Tesseract mode:
+The same OCR function is used for DOCX images and PDF page images. It runs
+Tesseract with `eng+chi_tra` and no image preprocessing, once per selected
+page-segmentation mode:
 
-- It runs Tesseract with `eng+chi_tra`.
-- For each image it compares:
-  - the **original image** with `--psm 3` (layout-aware), and
-  - a **line-removed / watermark-suppressed** copy with `--psm 6` (table mode).
-- It picks the result with the highest **Tesseract TSV confidence**, breaking
-  ties by word count. This matters because preprocessing helps tables but
-  destroys some screenshots.
-- For DOCX figures it also tries `--psm 11` (sparse text), which reads labels
-  scattered around boxes and arrows. Sparse mode is preferred when it is within
-  five confidence points of the best result.
+| PSM | Assumption | Good for |
+|---|---|---|
+| 3 | fully automatic layout | normal pages and mixed layouts |
+| 4 | single column of variable-size text | tables, receipts, row-wise data |
+| 6 | single uniform block | cropped paragraphs and text blocks |
+| 11 | sparse text, no reading order | diagrams, labels, screenshots |
 
-This is why `configs/tsv` must exist in `tools/tessdata/`.
+The four results are ranked by **coverage-adjusted confidence**:
+
+```text
+confidence × (words / max_words)
+```
+
+This is deliberately not raw confidence. Measured on the source notes, raw
+confidence correlates *negatively* with coverage within an image (−0.41):
+sparse mode often gets a high score by reading a few easy words while dropping
+table rows. The coverage factor discounts a result that missed a large part of
+the text, without rewarding a mode merely for producing more (possibly noisy)
+words. Raw confidence is used only when every result has zero words.
+
+`configs/tsv` must exist in `tools/tessdata/` because the script reads
+Tesseract's TSV confidence output.
 
 ## Commands and options
 

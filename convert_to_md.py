@@ -290,28 +290,7 @@ def comments_appendix(comments: list[dict[str, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def preprocess_for_ocr(src: Path, dst: Path) -> bool:
-    """Remove table rules and the light watermark, keep dark text."""
-    image = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
-    if image is None:
-        return False
-    height, width = image.shape
-    if width < 1800:
-        scale = 1800 / width
-        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        height, width = image.shape
-
-    # Keep only dark pixels; this drops the light-grey diagonal watermark.
-    binary = cv2.threshold(image, 160, 255, cv2.THRESH_BINARY_INV)[1]
-
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(20, width // 20), 1))
-    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(20, height // 20)))
-    horizontal = cv2.morphologyEx(binary, cv2.MORPH_OPEN, horizontal_kernel, iterations=1)
-    vertical = cv2.morphologyEx(binary, cv2.MORPH_OPEN, vertical_kernel, iterations=1)
-    rules = cv2.add(horizontal, vertical)
-    cleaned = cv2.subtract(binary, rules)
-    cleaned = cv2.bitwise_not(cleaned)
-    return cv2.imwrite(str(dst), cleaned)
+OCR_PSMS = (3, 4, 6, 11)
 
 
 def tesseract_tsv(
@@ -319,8 +298,8 @@ def tesseract_tsv(
 ) -> tuple[str, float, int]:
     """Run Tesseract and return reconstructed text, mean confidence, word count.
 
-    Tesseract's own confidence lets us choose between the original image and
-    the line-removed version instead of guessing which preprocessing helped.
+    The confidence and word count feed the mode selector in :func:`ocr_image`;
+    no image preprocessing is applied.
     """
     cmd = ["tesseract", str(image), "stdout", "-l", "eng+chi_tra", "--psm", str(psm), "tsv"]
     if tessdata_dir and (tessdata_dir / "eng.traineddata").exists():
@@ -374,41 +353,37 @@ def tesseract_tsv(
     return text, mean_confidence, word_count
 
 
-def ocr_image(
-    path: Path,
-    workdir: Path,
-    index: int,
-    tessdata_dir: Path | None,
-    diagram: bool = False,
-) -> str:
-    """OCR one raster image, choosing the best page-segmentation mode.
+def ocr_image(path: Path, tessdata_dir: Path | None) -> str:
+    """OCR one image with the same four PSM modes for DOCX and PDF.
 
-    ``diagram=True`` also tries sparse-text mode, which reads labels scattered
-    around boxes and arrows instead of assuming a single text column.
+    Modes:
+      3  automatic      mixed layouts and full pages
+      4  single column  tables and row-wise content
+      6  single block   cropped uniform text blocks
+      11 sparse text    diagrams, labels and screenshots
+
+    Raw confidence alone favours short, easy reads; sparse mode can score high
+    while dropping table rows.  Each result is therefore discounted by the
+    fraction of the best word coverage it captured:
+
+        confidence * (words / max_words)
+
+    This never rewards extra words (the largest result is not penalised), but
+    a truncated result needs a clearly higher confidence to win.
     """
-    cleaned = workdir / f"clean_{index}.png"
-    made_clean = preprocess_for_ocr(path, cleaned)
-
-    candidates: list[tuple[float, int, str, str]] = []
-    if made_clean:
-        text, confidence, words = tesseract_tsv(cleaned, psm=6, tessdata_dir=tessdata_dir)
-        candidates.append((confidence, words, text, "table"))
-    text, confidence, words = tesseract_tsv(path, psm=3, tessdata_dir=tessdata_dir)
-    candidates.append((confidence, words, text, "layout"))
-    if diagram:
-        text, confidence, words = tesseract_tsv(path, psm=11, tessdata_dir=tessdata_dir)
-        candidates.append((confidence, words, text, "sparse"))
-
-    # Prefer the most confident non-empty result; use word count as a tie-break.
-    candidates = [c for c in candidates if c[2].strip()]
-    if not candidates:
+    runs: list[tuple[float, int, str, int]] = []
+    for psm in OCR_PSMS:
+        text, confidence, words = tesseract_tsv(path, psm=psm, tessdata_dir=tessdata_dir)
+        if text.strip():
+            runs.append((confidence, words, text, psm))
+    if not runs:
         return ""
-    best = max(candidates, key=lambda item: (item[0], item[1]))
-    if diagram:
-        sparse = next((c for c in candidates if c[3] == "sparse"), None)
-        # Sparse mode is better at labels, so use it when it is close to the best.
-        if sparse and sparse[0] >= best[0] - 5:
-            best = sparse
+
+    max_words = max(run[1] for run in runs)
+    if max_words <= 0:
+        best = max(runs, key=lambda run: run[0])
+    else:
+        best = max(runs, key=lambda run: (run[0] * run[1] / max_words, run[1], run[0]))
 
     text = best[2]
     text = re.sub(r"[ \t]+\n", "\n", text)
@@ -528,8 +503,8 @@ def ocr_image_file(
         png_path = workdir / f"vector_{index}.png"
         if not vector_to_png(path, png_path, workdir):
             return ""
-        return ocr_image(png_path, workdir, index, tessdata_dir, diagram=True)
-    return ocr_image(path, workdir, index, tessdata_dir, diagram=True)
+        return ocr_image(png_path, tessdata_dir)
+    return ocr_image(path, tessdata_dir)
 
 
 def ocr_blockquote(text: str, label: str) -> str:
@@ -788,12 +763,7 @@ def ocr_page_images(
                 pix = page.get_pixmap(clip=box, dpi=300, alpha=False)
                 image_path = workdir / f"page_{page_number:04d}_{offset + index}.png"
                 pix.save(image_path)
-                text = ocr_image(
-                    image_path,
-                    workdir,
-                    page_number * 100 + offset + index,
-                    tessdata_dir,
-                )
+                text = ocr_image(image_path, tessdata_dir)
                 cache[cache_key] = text
             if text and useful_ocr(text):
                 results.append(text)
