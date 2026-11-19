@@ -44,7 +44,7 @@ Reproducible environment
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
     pillow==13.0.0
     tiktoken==0.14.0
-    Tesseract 5.5.4              (brew install tesseract)
+    Tesseract 5.5.4              (optional; --tesseract)
 """
 
 from __future__ import annotations

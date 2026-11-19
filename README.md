@@ -34,10 +34,12 @@ uv tool install .
 
 This installs the `notes4ai` and `cp2ai` commands. If a command is not found,
 run `uv tool update-shell` and restart the terminal (or add `~/.local/bin` to
-`PATH`). On first use it checks for
-`tesseract`, `emf2svg-conv` and `rsvg-convert`; if any are missing it runs
-`brew install` for them. Homebrew installs into a user-writable prefix on
-Apple Silicon, so no `sudo` is normally needed.
+`PATH`).
+
+On first use the tools install `libemf2svg` and `librsvg` with Homebrew if they
+are missing. Tesseract is installed only when you use `--tesseract`.
+Homebrew installs into a user-writable prefix on Apple Silicon, so no `sudo`
+is normally needed.
 
 To skip that automatic check:
 
@@ -82,7 +84,8 @@ Your Markdown files and the Homebrew packages remain installed.
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
   `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`, `pillow 13.0.0`,
   `tiktoken 0.14.0`
-- Homebrew packages: `libemf2svg`, `librsvg`, `tesseract`
+- Homebrew packages: `libemf2svg`, `librsvg`; optional `tesseract` for
+  `--tesseract`
 
 ## Usage
 
@@ -115,7 +118,7 @@ a directory. A directory is created if needed.
 | `-o`, `--out` | Output file, or output directory preserving structure |
 | `--jobs N` | Parallel worker processes (default: CPU cores) |
 | `--livetext` | Apple Live Text via `ocrmac` (default) |
-| `--tesseract` | Use Tesseract instead of Live Text |
+| `--tesseract` | Use Tesseract instead of Live Text (installs it if missing) |
 | `--no-ocr` | Do not OCR images |
 | `--version` | Show version |
 

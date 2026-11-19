@@ -33,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="ocr_engine",
         action="store_const",
         const="tesseract",
-        help="OCR with Tesseract instead of Live Text",
+        help="OCR with Tesseract instead of Live Text (installs it if missing)",
     )
     engines.add_argument(
         "--no-ocr",
@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    install_homebrew_dependencies()
+    install_homebrew_dependencies(args.ocr_engine)
 
     sources: list[Path] = []
     for value in args.files:

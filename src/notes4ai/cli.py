@@ -15,20 +15,22 @@ from .core import TESSDATA_DIR, convert_docx, convert_pdf
 
 SOURCE_SUFFIXES = {".docx", ".pdf"}
 HOMEBREW_COMMANDS = (
-    ("tesseract", "tesseract"),
     ("emf2svg-conv", "libemf2svg"),
     ("rsvg-convert", "librsvg"),
 )
 
 
-def install_homebrew_dependencies() -> None:
-    """Install missing OCR helpers with Homebrew on first use."""
-    if sys.platform != "darwin" or os.environ.get("NOTES4AI_SKIP_SETUP"):
+def install_homebrew_dependencies(engine: str) -> None:
+    """Install missing helpers; Tesseract only when explicitly requested."""
+    if engine == "none" or sys.platform != "darwin" or os.environ.get("NOTES4AI_SKIP_SETUP"):
         return
     brew = shutil.which("brew")
     if not brew:
         return
-    missing = [package for command, package in HOMEBREW_COMMANDS if not shutil.which(command)]
+    commands = list(HOMEBREW_COMMANDS)
+    if engine == "tesseract":
+        commands.append(("tesseract", "tesseract"))
+    missing = [package for command, package in commands if not shutil.which(command)]
     if not missing:
         return
     print(f"Installing Homebrew dependencies: {' '.join(missing)}", flush=True)
@@ -203,7 +205,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="ocr_engine",
         action="store_const",
         const="tesseract",
-        help="OCR with Tesseract instead of Live Text",
+        help="OCR with Tesseract instead of Live Text (installs it if missing)",
     )
     engines.add_argument(
         "--no-ocr",
@@ -219,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    install_homebrew_dependencies()
+    install_homebrew_dependencies(args.ocr_engine)
 
     target = args.target.expanduser()
     try:
