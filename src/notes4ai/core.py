@@ -43,6 +43,7 @@ Reproducible environment
     tabulate==0.10.0
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
     pillow==13.0.0
+    tiktoken==0.14.0
     Tesseract 5.5.4              (brew install tesseract)
 """
 

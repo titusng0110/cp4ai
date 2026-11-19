@@ -10,6 +10,8 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+import tiktoken
+
 from .cli import convert_one, install_homebrew_dependencies
 from .core import DEFAULT_OCR_ENGINE
 
@@ -79,12 +81,12 @@ def main(argv: list[str] | None = None) -> int:
         if jobs <= 1 or len(planned) == 1:
             for index, (source, output) in enumerate(planned, start=1):
                 try:
-                    convert_one(source, output, use_ocr, args.ocr_engine)
+                    details = convert_one(source, output, use_ocr, args.ocr_engine)
                 except Exception as exc:  # noqa: BLE001 - report and continue
                     failures += 1
                     print(f"[{index}/{len(planned)}] FAILED {source}: {exc}", file=sys.stderr)
                 else:
-                    print(f"[{index}/{len(planned)}] {source}")
+                    print(f"[{index}/{len(planned)}] {source} ({details})")
         else:
             workers = min(jobs, len(planned))
             with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -98,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                 for future in as_completed(futures):
                     index, source = futures[future]
                     try:
-                        future.result()
+                        details = future.result()
                     except Exception as exc:  # noqa: BLE001 - report and continue
                         failures += 1
                         print(
@@ -106,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                             file=sys.stderr,
                         )
                     else:
-                        print(f"[{index}/{len(planned)}] {source}")
+                        print(f"[{index}/{len(planned)}] {source} ({details})")
 
         if failures:
             print(f"{failures} file(s) failed; clipboard not changed", file=sys.stderr)
@@ -126,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: could not write to clipboard: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Copied {len(sources)} document(s), {len(clipboard)} characters")
+    tokens = len(tiktoken.get_encoding("cl100k_base").encode(clipboard))
+    print("=" * 25)
+    print(f"Copied to clipboard! ({len(clipboard)} characters / {tokens} tokens)")
     return 0
 
 

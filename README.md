@@ -80,7 +80,8 @@ Your Markdown files and the Homebrew packages remain installed.
 
 - Python 3.13
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
-  `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`, `pillow 13.0.0`
+  `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`, `pillow 13.0.0`,
+  `tiktoken 0.14.0`
 - Homebrew packages: `libemf2svg`, `librsvg`, `tesseract`
 
 ## Usage
@@ -143,7 +144,13 @@ Each document is wrapped with its filename (without directories):
 ```
 
 `cp2ai` accepts only `--tesseract`, `--no-ocr` and `--jobs N`. If any file
-fails, the clipboard is left unchanged.
+fails, the clipboard is left unchanged. On success it reports the clipboard
+size and the GPT-4 token count:
+
+```text
+=========================
+Copied to clipboard! (12345 characters / 3000 tokens)
+```
 
 ## Design / Algorithm
 

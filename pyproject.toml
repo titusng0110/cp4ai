@@ -17,6 +17,7 @@ dependencies = [
     "tabulate==0.10.0",
     "ocrmac==1.0.1",
     "pillow==13.0.0",
+    "tiktoken==0.14.0",
 ]
 
 [project.scripts]
