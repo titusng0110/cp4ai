@@ -16,7 +16,9 @@ LLM can interpret them; silently dropping a point is not recoverable.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
 - `md/` mirrors `src/` and includes a generated index.
-- Watermarks and short OCR fragments are kept rather than filtered out.
+- Watermark text and short fragments from the native text layer are kept; OCR
+  from images that yields fewer than 10 non-space characters is dropped as
+  decorative.
 
 Released under the MIT License.
 
@@ -42,7 +44,7 @@ setup normally needs no downloads.
 - Python 3.13
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
   `pypandoc-binary 1.17`, `tabulate 0.10.0`
-- Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4`, `tesseract 5.5.4`
+- Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4_1`, `tesseract 5.5.4`
 - Tesseract data: `eng.traineddata`, `configs/tsv`
 
 ## Usage
@@ -120,6 +122,10 @@ process after all workers finish.
    is OCR'd once.
 5. OCR text is appended after the native text under a marked OCR comment. OCR
    is discarded only when it adds no new words beyond the native text.
+6. OCR results are cached per page. The cache key includes the page number,
+   image xrefs and box size, because the rendered clip contains the page's
+   vector text; a background image shared by every page must not reuse another
+   page's result.
 
 ### OCR
 
@@ -134,7 +140,7 @@ four page-segmentation modes:
 | 6 | single uniform block | cropped paragraphs and text blocks |
 | 11 | sparse text | diagrams, labels, screenshots |
 
-Each image costs exactly four Tesseract runs. Results are ranked by
+Each OCR'd image region is run through all four modes; results are ranked by
 coverage-adjusted confidence:
 
 ```text
@@ -153,12 +159,15 @@ the requested process count.
 
 ### Design choices
 
-- Recall comes before cleanliness: watermark text, short OCR fragments and
-  imperfect wording are kept.
+- Recall comes before cleanliness: watermark text, short native-text fragments
+  and imperfect OCR wording are kept. Beyond de-duplication against the native
+  text, OCR is dropped only when an image yields fewer than 10 non-space
+  characters.
 - OCR text is additive; the native text layer always comes first.
 - Page markers are HTML comments, so they remain searchable without rendering.
 - DOCX floating drawings need a separate figures section because Pandoc
   extracts them without emitting an image link.
 - PDF foreground/background splitting prevents full-page template images from
-  duplicating the native text layer.
+  duplicating the native text layer; per-page OCR caching prevents a shared
+  background from reusing another page's OCR text.
 - No image files are copied into `md/`.
