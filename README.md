@@ -12,7 +12,8 @@ LLM can interpret them; silently dropping a point is not recoverable.
 
 - DOCX headings, lists, tables, footnotes, text boxes and tracked changes are
   preserved.
-- DOCX comments are reproduced verbatim in an appendix.
+- DOCX comments are inserted next to the passage they annotate, with author
+  and date; unanchored comments go into an appendix.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
 - `md/` mirrors `src/` and includes a generated index.
@@ -97,12 +98,14 @@ process after all workers finish.
 
 1. Pandoc converts the document to GitHub-flavored Markdown with headings,
    lists, tables, footnotes, text boxes and tracked changes preserved.
-2. Each image link is replaced by its OCR text. Images inside tables become
-   inline text so the table stays intact; other images become blockquotes.
+2. Each image is replaced by its OCR text. Markdown image links and raw
+   `<img>` tags are both handled. Images inside tables become inline text so
+   the table stays intact; other images become blockquotes.
 3. Floating drawings that Pandoc extracts but cannot place in the body are
    OCR'd in a figures section at the end.
-4. DOCX comments are read from `word/comments.xml` and appended with author,
-   date and the attached passage.
+4. DOCX comments are read from `word/comments.xml` and inserted after the
+   passage they annotate, with author and date. Pandoc's comment-span anchors
+   locate the passage; comments without one are listed in an appendix.
 5. EMF/EMF+/SVG images are rasterised before OCR:
    - EMF+ bitmaps are extracted directly from the EMF record;
    - classic EMF is converted with `emf2svg-conv`, then `rsvg-convert`;
@@ -122,10 +125,10 @@ process after all workers finish.
    is OCR'd once.
 5. OCR text is appended after the native text under a marked OCR comment. OCR
    is discarded only when it adds no new words beyond the native text.
-6. OCR results are cached per page. The cache key includes the page number,
-   image xrefs and box size, because the rendered clip contains the page's
-   vector text; a background image shared by every page must not reuse another
-   page's result.
+6. OCR results are cached by a SHA-256 hash of the rendered pixels, so text is
+   reused only when the image region is bit-identical. Image xrefs and box size
+   are not sufficient: the rendered clip can differ when vector text overlays
+   an image or when a shared background appears on several pages.
 
 ### OCR
 
@@ -141,7 +144,8 @@ four page-segmentation modes:
 | 11 | sparse text | diagrams, labels, screenshots |
 
 Each OCR'd image region is run through all four modes; results are ranked by
-coverage-adjusted confidence:
+coverage-adjusted confidence. OCR is skipped only when an identical rendered
+region has already been processed in the same document:
 
 ```text
 confidence × (words / max_words)
@@ -168,6 +172,8 @@ the requested process count.
 - DOCX floating drawings need a separate figures section because Pandoc
   extracts them without emitting an image link.
 - PDF foreground/background splitting prevents full-page template images from
-  duplicating the native text layer; per-page OCR caching prevents a shared
-  background from reusing another page's OCR text.
+  duplicating the native text layer; content-hash OCR caching reuses text only
+  for bit-identical rendered regions.
+- DOCX comments sit next to the passage they annotate so their context survives
+  conversion; only unanchored comments fall back to an appendix.
 - No image files are copied into `md/`.

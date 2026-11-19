@@ -6,13 +6,15 @@ What this script guarantees
 * DOCX files go through Pandoc, so headings, lists, tables, footnotes, text
   boxes and tracked changes survive.
 * Every raster DOCX image is OCR'd and its text is inserted into the Markdown
-  at the image's position. Image files are *not* copied into the output.
+  at the image's position, whether Pandoc emitted a Markdown link or an HTML
+  ``<img>`` tag. Image files are *not* copied into the output.
 * Every PDF keeps its digital text layer and page order, with page boundaries
   marked as ``<!-- page N of M -->``. Text that exists only inside PDF images
   (screenshots, table fragments, diagrams) is OCR'd and appended on the same
   page, under a clearly marked OCR comment.
-* DOCX comments are reproduced verbatim in an appendix, because Pandoc does
-  not emit them.
+* DOCX comments are inserted next to the passage they annotate, with author
+  and date; comments without a visible anchor go into an appendix. Pandoc
+  preserves the anchors as ``comment-start``/``comment-end`` spans.
 * A few DOCX files contain EMF/vector drawings. EMF+ bitmaps are extracted
   directly from the EMF record and OCR'd; classic EMF/SVG are rasterised with
   libemf2svg + librsvg. Only images that still fail are listed in a short
@@ -42,6 +44,8 @@ Reproducible environment
 from __future__ import annotations
 
 import argparse
+import hashlib
+import html
 import json
 import os
 import re
@@ -78,6 +82,13 @@ LIGATURES = {
     "\ufb04": "ffl",
 }
 IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+HTML_IMG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+HTML_IMG_SRC_RE = re.compile(
+    r"""\bsrc\s*=\s*(["'])(.*?)\1""", re.IGNORECASE | re.DOTALL
+)
+HTML_IMG_ALT_RE = re.compile(
+    r"""\balt\s*=\s*(["'])(.*?)\1""", re.IGNORECASE | re.DOTALL
+)
 OCR_COMMENT = (
     "<!-- OCR text from image(s) on this page; the text existed only inside "
     "a picture and may contain recognition errors -->"
@@ -234,25 +245,151 @@ def extract_docx_comments(path: Path) -> list[dict[str, str]]:
     return comments
 
 
-def comments_appendix(comments: list[dict[str, str]]) -> str:
+COMMENT_SPAN_RE = re.compile(
+    r'<span[^>]*class="comment-(?:start|end|reference)"[^>]*\bid="(\d+)"'
+)
+
+
+def comment_heading(comment: dict[str, str], index: int) -> str:
+    heading = f"Comment {index} — {comment['author']}"
+    if comment["date"]:
+        heading += f" — {comment['date']}"
+    return heading
+
+
+def comment_block(comment: dict[str, str], index: int, indent: str = "") -> list[str]:
+    """Render one comment as a blockquote at the given indentation."""
+    lines = [f"{indent}> **{comment_heading(comment, index)}**", f"{indent}>"]
+    anchor = comment["anchor"].strip()
+    if anchor:
+        if len(anchor) > 400:
+            anchor = anchor[:400].rstrip() + "…"
+        lines.extend([f"{indent}> **Attached to:** “{anchor}”", f"{indent}>"])
+    for line in comment["text"].splitlines():
+        lines.append(f"{indent}> {line}" if line.strip() else f"{indent}>")
+    return lines
+
+
+def place_inline_comment(
+    line: str, comment_id: str, inline: str, pipe_table: bool
+) -> str:
+    """Insert a comment at the end of the cell containing its anchor span."""
+    matches = [match for match in COMMENT_SPAN_RE.finditer(line) if match.group(1) == comment_id]
+    if not matches:
+        return line + inline
+    position = matches[-1].start()
+    if pipe_table:
+        delimiter = re.search(r"(?<!\\)\|", line[position:])
+        if delimiter:
+            at = position + delimiter.start()
+            return line[:at] + inline + line[at:]
+        return line + inline
+    cell_end = re.search(r"</(?:td|th)>", line[position:])
+    if cell_end:
+        at = position + cell_end.start()
+        return line[:at] + inline + line[at:]
+    return line + inline
+
+
+def inline_comment(comment: dict[str, str], index: int, pipe_table: bool) -> str:
+    """Render one comment inline, for a table cell that must stay intact."""
+    text = " ".join(comment["text"].split())
+    parts = [f"<br><strong>{html.escape(comment_heading(comment, index))}</strong>"]
+    anchor = comment["anchor"].strip()
+    if anchor:
+        if len(anchor) > 200:
+            anchor = anchor[:200].rstrip() + "…"
+        parts.append(f" <em>“{html.escape(anchor)}”</em>")
+    parts.append(f": {html.escape(text)}")
+    inline = "".join(parts)
+    return inline.replace("|", "\\|") if pipe_table else inline
+
+
+def insert_comments_inline(
+    markdown: str, comments: list[dict[str, str]]
+) -> tuple[str, list[tuple[int, dict[str, str]]]]:
+    """Move comments from the appendix to just after their anchored passage.
+
+    Pandoc emits ``<span class="comment-start/end">`` markers around the text a
+    comment is attached to. Use those positions to place the comment text at
+    the end of the containing paragraph, list item or table cell.
+    """
+    if not comments:
+        return markdown, []
+
+    by_id = {comment["id"]: comment for comment in comments}
+    number = {comment["id"]: index for index, comment in enumerate(comments, start=1)}
+    lines = markdown.splitlines()
+
+    last_line: dict[str, int] = {}
+    line_is_table: list[bool] = []
+    in_html_table = False
+    for line_index, line in enumerate(lines):
+        if "<table" in line:
+            in_html_table = True
+        line_is_table.append(in_html_table or line.lstrip().startswith("|"))
+        for match in COMMENT_SPAN_RE.finditer(line):
+            if match.group(1) in by_id:
+                last_line[match.group(1)] = line_index
+        if "</table>" in line:
+            in_html_table = False
+
+    insertions: dict[int, list[str]] = {}
+    unplaced: list[tuple[int, dict[str, str]]] = []
+    for comment in comments:
+        line_index = last_line.get(comment["id"])
+        if line_index is None:
+            unplaced.append((number[comment["id"]], comment))
+        else:
+            insertions.setdefault(line_index, []).append(comment["id"])
+
+    out: list[str] = []
+    for line_index, line in enumerate(lines):
+        ids = insertions.get(line_index)
+        if not ids:
+            out.append(line)
+            continue
+
+        if line_is_table[line_index]:
+            updated = line
+            pipe_table = updated.lstrip().startswith("|")
+            for comment_id in ids:
+                inline = inline_comment(
+                    by_id[comment_id], number[comment_id], pipe_table
+                )
+                updated = place_inline_comment(updated, comment_id, inline, pipe_table)
+            out.append(updated)
+            continue
+
+        out.append(line)
+        leading = re.match(r"^[ \t]*", line).group(0)
+        indent = leading
+        if re.match(r"^[ \t]*(?:[-*+]|\d+[.)])\s+", line):
+            indent = leading + "    "
+        for comment_id in ids:
+            out.extend(comment_block(by_id[comment_id], number[comment_id], indent))
+        out.append("")
+
+    return "\n".join(out), unplaced
+
+
+def unplaced_comments_appendix(comments: list[tuple[int, dict[str, str]]]) -> str:
+    """Append comments whose anchors do not appear in the converted Markdown."""
     if not comments:
         return ""
     out = [
         "---",
         "",
-        "## Appendix: Comments in the original DOCX",
+        "## Appendix: Comments not anchored in the body",
         "",
         (
-            "> Word stores comments separately from the body text. Pandoc does not "
-            "emit them, so they are reproduced verbatim below with their author, "
-            "date, and the passage they were attached to."
+            "> These comments had no visible anchor in the converted Markdown, "
+            "so they are reproduced verbatim below with their author, date and "
+            "the passage Word recorded."
         ),
     ]
-    for index, comment in enumerate(comments, start=1):
-        meta = f"### Comment {index} — {comment['author']}"
-        if comment["date"]:
-            meta += f" — {comment['date']}"
-        out.extend(["", meta, ""])
+    for index, comment in comments:
+        out.extend(["", f"### {comment_heading(comment, index)}", ""])
         anchor = comment["anchor"].strip()
         if anchor:
             if len(anchor) > 400:
@@ -514,34 +651,50 @@ def ocr_blockquote(text: str, label: str) -> str:
     return "\n".join(lines)
 
 
+def resolve_docx_media(source: str, media_dir: Path, workdir: Path) -> Path:
+    """Resolve a Markdown or HTML image source against Pandoc's temp tree."""
+    source = html.unescape(unquote(source.strip()))
+    for base in (workdir, media_dir):
+        candidate = (base / source).resolve()
+        if candidate.exists():
+            return candidate
+    return (workdir / source).resolve()
+
+
 def replace_docx_images(
     markdown: str,
     media_dir: Path,
     workdir: Path,
     tessdata_dir: Path | None,
 ) -> tuple[str, list[Path], set[Path]]:
-    """Replace every DOCX image link with its OCR text (or a clear note)."""
+    """Replace every DOCX image link or ``<img>`` tag with its OCR text."""
     failed_vectors: list[Path] = []
     referenced: set[Path] = set()
     counter = 0
 
-    def repl(match: re.Match[str]) -> str:
+    def image_text(source: str, alt: str) -> tuple[str, str, str | None]:
         nonlocal counter
-        alt = match.group(1).strip()
-        source = unquote(match.group(2).strip())
-        image_path = (media_dir / source).resolve()
-        label = alt or Path(source).name
+        image_path = resolve_docx_media(source, media_dir, workdir)
+        label = alt.strip() or Path(source).name
         if not image_path.exists():
-            return f"<!-- image not extracted: {label} -->"
+            return "", label, f"<!-- image not extracted: {label} -->"
 
         counter += 1
         referenced.add(image_path)
         text = ocr_image_file(image_path, workdir, counter, tessdata_dir)
-        if not text or not useful_ocr(text):
-            if image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
-                failed_vectors.append(image_path)
-                return f"<!-- vector image not OCR'd: {label} -->"
-            return f"<!-- image omitted: {label} (no readable text detected) -->"
+        if text and useful_ocr(text):
+            return text, label, None
+        if image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
+            failed_vectors.append(image_path)
+            return "", label, f"<!-- vector image not OCR'd: {label} -->"
+        return "", label, f"<!-- image omitted: {label} (no readable text detected) -->"
+
+    def markdown_repl(match: re.Match[str]) -> str:
+        alt = match.group(1).strip()
+        source = match.group(2).strip()
+        text, label, note = image_text(source, alt)
+        if note:
+            return note
 
         # Keep table rows intact: a multi-line blockquote would break the table.
         line_start = markdown.rfind("\n", 0, match.start()) + 1
@@ -549,11 +702,42 @@ def replace_docx_images(
         line = markdown[line_start : line_end if line_end != -1 else len(markdown)]
         if line.lstrip().startswith("|"):
             escaped = text.replace("|", "\\|").replace("\n", "<br>")
-            return f"<br>**Image text (OCR):** {escaped}"
+            return f"<br>**Image text (OCR) — {label}:** {escaped}"
 
         return "\n\n" + ocr_blockquote(text, label) + "\n\n"
 
-    return IMAGE_RE.sub(repl, markdown), failed_vectors, referenced
+    def html_repl(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        src_match = HTML_IMG_SRC_RE.search(tag)
+        if not src_match:
+            return "<!-- image not extracted: missing src -->"
+        alt_match = HTML_IMG_ALT_RE.search(tag)
+        alt = html.unescape(alt_match.group(2)) if alt_match else ""
+        text, label, note = image_text(src_match.group(2), alt)
+        if note:
+            return note
+
+        line_start = markdown.rfind("\n", 0, match.start()) + 1
+        line_end = markdown.find("\n", match.end())
+        line = markdown[line_start : line_end if line_end != -1 else len(markdown)]
+        prefix = markdown[: match.start()].lower()
+        in_table = (
+            prefix.count("<table") > prefix.count("</table>")
+            or line.lstrip().startswith("|")
+            or "<td" in line
+            or "<th" in line
+        )
+        standalone = line.strip() == tag.strip()
+        if standalone and not in_table:
+            return "\n\n" + ocr_blockquote(text, label) + "\n\n"
+
+        escaped = html.escape(text).replace("\n", "<br>")
+        if in_table:
+            escaped = escaped.replace("|", "\\|")
+        return f"<br>**Image text (OCR) — {html.escape(label)}:** {escaped}"
+
+    markdown = IMAGE_RE.sub(markdown_repl, markdown)
+    return HTML_IMG_RE.sub(html_repl, markdown), failed_vectors, referenced
 
 
 def natural_key(path: Path) -> list[object]:
@@ -656,6 +840,7 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
         vector_files = sorted(set(failed_vectors + more_failed), key=natural_key)
         header = extract_docx_header(path)
         comments = extract_docx_comments(path)
+        body, unplaced_comments = insert_comments_inline(body, comments)
 
     pieces = [
         front_matter(
@@ -673,7 +858,13 @@ def convert_docx(path: Path, out_path: Path, tessdata_dir: Path | None) -> str:
     if header:
         pieces.extend([f"> **Original document header:** {header}", ""])
     pieces.extend(
-        [body, "", figures, comments_appendix(comments), vector_note(vector_files)]
+        [
+            body,
+            "",
+            figures,
+            unplaced_comments_appendix(unplaced_comments),
+            vector_note(vector_files),
+        ]
     )
     write_markdown(out_path, "\n".join(pieces))
     return (
@@ -724,7 +915,6 @@ def ocr_page_images(
     page_area = page.rect.get_area()
     foreground: list[pymupdf.Rect] = []
     background: list[pymupdf.Rect] = []
-    image_boxes: list[tuple[pymupdf.Rect, int]] = []
     for info in page.get_image_info(xrefs=True):
         box = pymupdf.Rect(info["bbox"]) & page.rect
         if box.is_empty or box.width < 80 or box.height < 40:
@@ -737,26 +927,19 @@ def ocr_page_images(
             background.append(box)
         else:
             foreground.append(box)
-        image_boxes.append((box, int(info.get("xref", 0))))
 
     def run_boxes(boxes: list[pymupdf.Rect], offset: int) -> list[str]:
         results: list[str] = []
         for index, box in enumerate(merge_boxes(boxes)):
-            xrefs = sorted(
-                {xref for image_box, xref in image_boxes if image_box.intersects(box)}
-            )
-            # The rendered clip includes the page's vector text, so a shared
-            # background image is not enough to make two pages' OCR identical.
-            cache_key = (
-                page_number,
-                tuple(xrefs),
-                round(box.width),
-                round(box.height),
-            )
+            pix = page.get_pixmap(clip=box, dpi=300, alpha=False)
+            # Reuse OCR only for a bit-identical rendered region. Image xrefs
+            # and box size do not determine the pixels (vector text overlays
+            # and shared backgrounds can differ), so hash the pixels instead.
+            digest = hashlib.sha256(pix.samples).digest()
+            cache_key = (pix.width, pix.height, len(pix.samples), digest)
             if cache_key in cache:
                 text = cache[cache_key]
             else:
-                pix = page.get_pixmap(clip=box, dpi=300, alpha=False)
                 image_path = workdir / f"page_{page_number:04d}_{offset + index}.png"
                 pix.save(image_path)
                 text = ocr_image(image_path, tessdata_dir)
@@ -871,9 +1054,11 @@ def build_index(out_dir: Path, src_root: Path, rows: list[tuple[Path, Path, str]
             "preserved. Every raster image is passed through OCR with Tesseract "
             "5.5.4 and its text is inserted at the image's position where detected; "
             "image files are not copied into the Markdown. DOCX comments are "
-            "reproduced verbatim in an appendix. EMF+ bitmaps are extracted from the "
-            "EMF record and OCR'd; classic EMF/SVG are rasterised with libemf2svg + "
-            "librsvg. Only failures are listed in a short note at the end of the file."
+            "inserted next to the passage they annotate, with author and date; "
+            "comments without a visible anchor are listed in an appendix. EMF+ "
+            "bitmaps are extracted from the EMF record and OCR'd; classic EMF/SVG "
+            "are rasterised with libemf2svg + librsvg. Only failures are listed in "
+            "a short note at the end of the file."
         ),
         (
             "- **PDF:** PyMuPDF4LLM 0.3.4 preserves the digital text layer and page "
