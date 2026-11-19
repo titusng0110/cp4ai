@@ -32,8 +32,8 @@ cd notes4ai
 uv tool install .
 ```
 
-This installs the `notes4ai` command. If the command is not found, run
-`uv tool update-shell` and restart the terminal (or add `~/.local/bin` to
+This installs the `notes4ai` and `cp2ai` commands. If a command is not found,
+run `uv tool update-shell` and restart the terminal (or add `~/.local/bin` to
 `PATH`). On first use it checks for
 `tesseract`, `emf2svg-conv` and `rsvg-convert`; if any are missing it runs
 `brew install` for them. Homebrew installs into a user-writable prefix on
@@ -73,8 +73,8 @@ Uninstall with:
 uv tool uninstall notes4ai
 ```
 
-This removes the `notes4ai` command and its isolated environment. Your
-Markdown files and the Homebrew packages remain installed.
+This removes the `notes4ai` and `cp2ai` commands and their isolated environment.
+Your Markdown files and the Homebrew packages remain installed.
 
 ### Installed packages
 
@@ -119,6 +119,31 @@ a directory. A directory is created if needed.
 | `--version` | Show version |
 
 `-rf` and `-r -f` are equivalent. Directory inputs require `-r`.
+
+### Clipboard mode
+
+`cp2ai` uses the same conversion pipeline but writes the result to the macOS
+clipboard instead of files. It accepts one or more files and does not support
+directories:
+
+```bash
+cp2ai a.pdf b.docx
+```
+
+Each document is wrapped with its filename (without directories):
+
+```text
+[a.pdf BEGIN]
+...
+[a.pdf END]
+
+[b.docx BEGIN]
+...
+[b.docx END]
+```
+
+`cp2ai` accepts only `--tesseract`, `--no-ocr` and `--jobs N`. If any file
+fails, the clipboard is left unchanged.
 
 ## Design / Algorithm
 

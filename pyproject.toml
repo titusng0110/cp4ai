@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 notes4ai = "notes4ai.cli:main"
+cp2ai = "notes4ai.cp2ai:main"
 
 [tool.uv]
 package = true
