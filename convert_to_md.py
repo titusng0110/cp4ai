@@ -12,8 +12,8 @@ What this script guarantees
   marked as ``<!-- page N of M -->``. Text that exists only inside PDF images
   (screenshots, table fragments, diagrams) is OCR'd and appended on the same
   page, under a clearly marked OCR comment.
-* OCR defaults to Apple's Live Text through ocrmac for printed English text,
-  with a Tesseract fallback when Live Text returns nothing usable.
+* OCR defaults to Apple's Live Text through ocrmac for printed English text.
+  Transparent images are flattened onto white before recognition.
   ``--tesseract`` selects Tesseract for every image instead.
 * DOCX comments are inserted next to the passage they annotate, with author
   and date; comments without a visible anchor go into an appendix. Pandoc
@@ -43,6 +43,7 @@ Reproducible environment
     numpy==2.5.5
     tabulate==0.10.0
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
+    pillow==13.0.0
     Tesseract 5.5.4              (brew install tesseract)
     eng.traineddata in tools/tessdata
 """
@@ -422,7 +423,7 @@ DEFAULT_OCR_ENGINE = "livetext"
 def ocr_engine_label(engine: str) -> str:
     if engine == "livetext":
         languages = ", ".join(OCR_LIVETEXT_LANGS)
-        return f"ocrmac livetext ({languages}; tesseract fallback)"
+        return f"ocrmac livetext ({languages})"
     return f"tesseract 5.5.4 {OCR_LANG}"
 
 
@@ -540,9 +541,17 @@ def ocr_image_tesseract(path: Path, tessdata_dir: Path | None) -> str:
 def ocr_image_livetext(path: Path) -> str:
     """OCR one image through Apple's Live Text framework via ocrmac."""
     from ocrmac import ocrmac
+    from PIL import Image
+
+    # Live Text returns nothing for RGBA images with a transparent
+    # background (common for EMF/SVG conversions). Flatten onto white first.
+    with Image.open(path) as opened:
+        rgba = opened.convert("RGBA")
+        flattened = Image.new("RGB", rgba.size, "white")
+        flattened.paste(rgba, mask=rgba.getchannel("A"))
 
     annotations = ocrmac.OCR(
-        str(path),
+        flattened,
         framework="livetext",
         language_preference=list(OCR_LIVETEXT_LANGS),
         unit="line",
@@ -559,12 +568,7 @@ def ocr_image(
 ) -> str:
     """OCR one image with the selected engine."""
     if engine == "livetext":
-        text = ocr_image_livetext(path)
-        # Live Text sometimes misses dense diagrams. Keep recall by falling
-        # back to Tesseract when it returns nothing usable.
-        if (not text or not useful_ocr(text)) and shutil.which("tesseract"):
-            return ocr_image_tesseract(path, tessdata_dir)
-        return text
+        return ocr_image_livetext(path)
     return ocr_image_tesseract(path, tessdata_dir)
 
 

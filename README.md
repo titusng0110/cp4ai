@@ -17,8 +17,7 @@ LLM can interpret them; silently dropping a point is not recoverable.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
 - OCR defaults to Apple's Live Text via `ocrmac`; `--tesseract` switches to
-  Tesseract. Live Text falls back to Tesseract per image when it returns no
-  usable text.
+  Tesseract. Transparent images are flattened onto white before OCR.
 - `md/` mirrors `src/` and includes a generated index.
 - Watermark text and short fragments from the native text layer are kept; OCR
   from images that yields fewer than 10 non-space characters is dropped as
@@ -47,7 +46,7 @@ setup normally needs no downloads.
 
 - Python 3.13
 - Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
-  `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`
+  `pypandoc-binary 1.17`, `tabulate 0.10.0`, `ocrmac 1.0.1`, `pillow 13.0.0`
 - Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4_1`, `tesseract 5.5.4`
 - Tesseract data: `eng.traineddata`, `configs/tsv`
 
@@ -87,10 +86,9 @@ rebuild the library index.
 
 Live Text is the default and requires macOS Sonoma or later. It is usually
 more accurate on printed English than Tesseract, but its line ordering can be
-less faithful in multi-column forms. If Live Text returns no usable text for an
-image, the converter retries that image with Tesseract so content is not
-dropped. `--tesseract` requires the Homebrew binary and uses four
-page-segmentation modes for every image.
+less faithful in multi-column forms. Transparent images are flattened onto
+white before recognition. `--tesseract` requires the Homebrew binary and uses
+four page-segmentation modes for every image.
 
 ## Design / Algorithm
 
@@ -152,8 +150,9 @@ configured engine.
 `ocrmac`, with English (`en-US`) preferred. It is usually more accurate than
 Tesseract on printed English and keeps clause numbers with their text, but
 column order in forms and tables can be less faithful. It performs one
-recognition pass per image rather than the four Tesseract passes. If Live Text
-returns no usable text, the image is retried with Tesseract.
+recognition pass per image rather than the four Tesseract passes. Transparent
+images are flattened onto white first, because Live Text otherwise returns
+nothing for RGBA images with an alpha background.
 
 **Tesseract (`--tesseract`).** English-only Tesseract (`eng`) with no image
 preprocessing, once for each of four page-segmentation modes:
