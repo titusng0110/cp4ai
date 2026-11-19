@@ -33,6 +33,14 @@ uv sync
 `tools/tessdata/` already contains `eng.traineddata` and the TSV config, so
 setup normally needs no downloads.
 
+### Installed packages
+
+- Python 3.13
+- Python packages: `numpy 2.5.5`, `pymupdf 1.28.2`, `pymupdf4llm 0.3.4`,
+  `pypandoc-binary 1.17`, `tabulate 0.10.0`
+- Homebrew packages: `libemf2svg 1.8.1`, `librsvg 2.63.4`, `tesseract 5.5.4`
+- Tesseract data: `eng.traineddata`, `configs/tsv`
+
 ## Usage
 
 ```bash
