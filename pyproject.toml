@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cp4ai"
 version = "2.0.0"
-description = "Copy 4 AI: convert DOCX, PDF and PPTX into recall-first Markdown for LLM ingestion."
+description = "Copy 4 AI: convert lecture notes from DOCX, PDF and PPTX into recall-first Markdown for LLM ingestion."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13,<3.14"

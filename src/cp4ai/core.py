@@ -1,4 +1,4 @@
-"""Convert DOCX, PDF and PPTX study material into AI-friendly Markdown.
+"""Convert lecture notes from DOCX, PDF and PPTX into AI-friendly Markdown.
 
 What this package guarantees
 ----------------------------

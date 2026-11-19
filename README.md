@@ -1,9 +1,9 @@
 # Copy 4 AI (cp4ai)
 
-Copy 4 AI (package `cp4ai`) converts law notes — cases, statutes, lecture
-outlines, problem sets and exam frameworks — from `.docx`, `.pdf` and `.pptx`
-into Markdown for downstream LLM ingestion. The `md4ai` command writes files;
-`cp4ai` copies the converted chain to the clipboard.
+Copy 4 AI (package `cp4ai`) copies text from lecture notes into Markdown for
+downstream LLM ingestion. It accepts `.docx`, `.pdf` and `.pptx` files. The
+`md4ai` command writes files; `cp4ai` copies the converted chain to the
+clipboard.
 
 The pipeline is **recall-first**: every source word matters. OCR errors,
 duplicate text and imperfect formatting are acceptable because the downstream
