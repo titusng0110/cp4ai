@@ -2,9 +2,13 @@
 
 ## Intro
 
-`notes4ai` converts `.docx` and `.pdf` notes into AI-friendly Markdown. It keeps
-the full native text and OCRs text that exists only inside images. It never
-summarizes, shortens or paraphrases.
+`notes4ai` converts law notes — cases, statutes, lecture outlines, problem sets
+and exam frameworks — from `.docx` and `.pdf` into Markdown for downstream LLM
+ingestion.
+
+The pipeline is **recall-first**: every source word matters. OCR errors,
+duplicate text and imperfect formatting are acceptable because the downstream
+LLM can interpret them; silently dropping a point is not recoverable.
 
 - DOCX headings, lists, tables, footnotes, text boxes and tracked changes are
   preserved.
@@ -12,9 +16,7 @@ summarizes, shortens or paraphrases.
 - PDF page order and page boundaries are preserved.
 - PDF and DOCX images are OCR'd; image files are not copied into the output.
 - `md/` mirrors `src/` and includes a generated index.
-
-OCR text can contain recognition errors, especially on screenshots and small
-tables.
+- Watermarks and short OCR fragments are kept rather than filtered out.
 
 ## Setup
 
@@ -115,8 +117,7 @@ process after all workers finish.
 4. Adjacent image fragments are merged, so a table split across several images
    is OCR'd once.
 5. OCR text is appended after the native text under a marked OCR comment. OCR
-   that duplicates at least 90% of the native text is discarded.
-6. The diagonal course watermark is removed when the text layer exposes it.
+   is discarded only when it adds no new words beyond the native text.
 
 ### OCR
 
@@ -150,6 +151,8 @@ the requested process count.
 
 ### Design choices
 
+- Recall comes before cleanliness: watermark text, short OCR fragments and
+  imperfect wording are kept.
 - OCR text is additive; the native text layer always comes first.
 - Page markers are HTML comments, so they remain searchable without rendering.
 - DOCX floating drawings need a separate figures section because Pandoc

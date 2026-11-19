@@ -70,8 +70,6 @@ DEFAULT_OUT = ROOT / "md"
 TESSDATA_DIR = ROOT / "tools" / "tessdata"
 
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-WATERMARK_RE = re.compile(r"(?:@?\s*pcll\s*8026\s*pass|@?pcll2026pass)", re.IGNORECASE)
-ALNUM_RE = re.compile(r"[A-Za-z0-9\u3400-\u9fff]")
 LIGATURES = {
     "\ufb00": "ff",
     "\ufb01": "fi",
@@ -100,9 +98,6 @@ def clean_text(text: str) -> str:
     text = re.sub(r"(?<=\d)\s*\[(st|nd|rd|th)\]", r"\1", text, flags=re.IGNORECASE)
     lines = []
     for line in text.splitlines():
-        # Drop the diagonal course watermark where the text layer exposes it.
-        if WATERMARK_RE.search(line) and len(line.strip()) < 40:
-            continue
         lines.append(line.rstrip())
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -149,21 +144,9 @@ def token_set(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]{2,}", text.lower()))
 
 
-def overlap_ratio(candidate: str, reference: str) -> float:
-    candidate_tokens = token_set(candidate)
-    if not candidate_tokens:
-        return 1.0
-    return len(candidate_tokens & token_set(reference)) / len(candidate_tokens)
-
-
 def useful_ocr(text: str) -> bool:
-    """Reject OCR noise from logos, photos and decorative images."""
-    if len(ALNUM_RE.findall(text)) < 8:
-        return False
-    if len(re.findall(r"[A-Za-z0-9]{2,}", text)) < 2:
-        return False
-    printable = sum(ch.isalnum() or ch.isspace() or ch in ".,;:()[]/-%$&'\"+=" for ch in text)
-    return printable / max(len(text), 1) >= 0.55
+    """Discard OCR from decorative images: fewer than 10 non-space characters."""
+    return len(re.sub(r"\s+", "", text)) >= 10
 
 
 # ---------------------------------------------------------------------------
@@ -399,9 +382,6 @@ def ocr_image(path: Path, tessdata_dir: Path | None) -> str:
     text = best.text
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = "\n".join(
-        line for line in text.splitlines() if not (WATERMARK_RE.search(line) and len(line.strip()) < 40)
-    )
     return text.strip()
 
 
@@ -816,7 +796,7 @@ def convert_pdf(
                     ocr_text = ocr_page_images(
                         page, page_index + 1, workdir, cache, tessdata_dir, native
                     )
-                    if ocr_text and overlap_ratio(ocr_text, native) >= 0.90:
+                    if ocr_text and token_set(ocr_text) <= token_set(native):
                         ocr_text = ""
                 if ocr_text:
                     ocr_pages += 1
@@ -860,11 +840,11 @@ def find_sources(src: Path) -> list[Path]:
     return sorted(files, key=lambda p: p.as_posix().lower())
 
 
-def build_index(out_dir: Path, rows: list[tuple[Path, Path, str]]) -> None:
+def build_index(out_dir: Path, src_root: Path, rows: list[tuple[Path, Path, str]]) -> None:
     lines = [
         "# Source Library (Markdown)",
         "",
-        f"Converted from `src/` on {date.today().isoformat()}.",
+        f"Converted from `{display_path(src_root)}` on {date.today().isoformat()}.",
         "",
         "## Documents",
         "",
@@ -1043,7 +1023,7 @@ def main() -> int:
     if args.only:
         print("Index not rebuilt (partial --only run).")
     else:
-        build_index(out_root, rows)
+        build_index(out_root, src_root, rows)
 
     converted = sum(1 for _, _, details in rows if details != "existing")
     print(f"\nConverted {converted} file(s) into {out_root}")
