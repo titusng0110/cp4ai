@@ -54,6 +54,10 @@ available from https://formulae.brew.sh/.
   https://python-pillow.org/
 - **tabulate** — MIT
   https://github.com/astanin/python-tabulate
+- **ftfy** — Apache-2.0
+  https://github.com/rspeer/python-ftfy
+- **wcwidth** — MIT
+  https://github.com/jquast/wcwidth
 - **psutil** — BSD-3-Clause
   https://github.com/giampaolo/psutil
 - **PyYAML** — MIT

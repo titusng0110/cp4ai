@@ -293,8 +293,9 @@ annotations when called from an ordinary background thread.
    level-2 headings.
 2. Slides are delimited with `<!-- slide N of M -->`.
 3. Images are replaced by OCR text with no minimum-length filter. When the
-   PPTX stores a picture's position, its coordinates (`x`, `y`, `w`, `h` in
-   EMU) are appended next to the OCR text.
+   PPTX stores a picture's position, it is appended as a percentage rounded to
+   the nearest 10%:
+   `**Position:** [top: 45%, left: 60%, width: 40%, height: 20%]`.
 4. Speaker notes are read from `notesSlide*.xml` and appended at the end of
    their slide under `### Speaker notes`.
 5. PPTX comments are read from the slide relationships and appended at the end

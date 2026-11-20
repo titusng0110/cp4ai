@@ -44,6 +44,7 @@ Reproducible environment
     Pandoc 3.14                 (bundled in the macOS app; CLI uses pandoc)
     numpy==2.5.5
     tabulate==0.10.0
+    ftfy==6.3.1
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
     pillow==13.0.0
     tiktoken==0.14.0
@@ -65,6 +66,8 @@ import struct
 import subprocess
 import tempfile
 import zipfile
+
+import ftfy
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
@@ -176,7 +179,9 @@ def front_matter(path: Path, source_format: str, **extra: object) -> str:
 
 def write_markdown(out_path: Path, body: str) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(body.rstrip() + "\n", encoding="utf-8")
+    # Run once per document: repairs double-encoded UTF-8 without touching
+    # legitimate Unicode or formatting.
+    out_path.write_text(ftfy.fix_text(body.rstrip()) + "\n", encoding="utf-8")
 
 
 def token_set(text: str) -> set[str]:
@@ -1050,6 +1055,17 @@ def _pptx_slide_parts(zf: zipfile.ZipFile) -> list[str]:
     return parts
 
 
+def _pptx_slide_size(zf: zipfile.ZipFile) -> tuple[int, int]:
+    presentation = ET.fromstring(zf.read("ppt/presentation.xml"))
+    slide_size = presentation.find(P_NS + "sldSz")
+    if slide_size is None:
+        return 0, 0
+    try:
+        return int(slide_size.get("cx", "0")), int(slide_size.get("cy", "0"))
+    except ValueError:
+        return 0, 0
+
+
 def _pptx_authors(zf: zipfile.ZipFile) -> dict[str, str]:
     if "ppt/commentAuthors.xml" not in zf.namelist():
         return {}
@@ -1151,21 +1167,42 @@ def _pptx_images(zf: zipfile.ZipFile, slide_part: str) -> dict[str, tuple[int, i
 
 def _pptx_metadata(path: Path) -> list[dict[str, object]]:
     with zipfile.ZipFile(path) as zf:
+        slide_width, slide_height = _pptx_slide_size(zf)
         return [
             {
                 "notes": _pptx_notes_text(zf, part),
                 "comments": _pptx_comments(zf, part),
                 "images": _pptx_images(zf, part),
+                "width": slide_width,
+                "height": slide_height,
             }
             for part in _pptx_slide_parts(zf)
         ]
 
 
-def _pptx_coords(coords: tuple[int, int, int, int] | None) -> str:
-    if not coords:
+def _pptx_pct(value: int, total: int) -> int:
+    if total <= 0:
+        return 0
+    percent = value / total * 100
+    return max(0, min(100, int(percent / 10 + 0.5) * 10))
+
+
+def _pptx_coords(
+    coords: tuple[int, int, int, int] | None,
+    slide_width: int,
+    slide_height: int,
+) -> str:
+    if not coords or not slide_width or not slide_height:
         return ""
     x, y, width, height = coords
-    return f"x={x}, y={y}, w={width}, h={height} (EMU)"
+    top = _pptx_pct(y, slide_height)
+    left = _pptx_pct(x, slide_width)
+    box_width = _pptx_pct(width, slide_width)
+    box_height = _pptx_pct(height, slide_height)
+    return (
+        f"[top: {top}%, left: {left}%, "
+        f"width: {box_width}%, height: {box_height}%]"
+    )
 
 
 def _replace_pptx_images(
@@ -1177,6 +1214,8 @@ def _replace_pptx_images(
     engine: str,
     use_ocr: bool,
     image_coords: dict[str, tuple[int, int, int, int]],
+    slide_width: int,
+    slide_height: int,
 ) -> str:
     counter = 0
 
@@ -1188,7 +1227,7 @@ def _replace_pptx_images(
         image_path = resolve_docx_media(source, media_dir, workdir)
         label = title or alt or Path(source).name
         coords = image_coords.get(title) or image_coords.get(Path(source).name)
-        coordinate_text = _pptx_coords(coords)
+        coordinate_text = _pptx_coords(coords, slide_width, slide_height)
 
         if not image_path.exists():
             note = f"<!-- image not extracted: {label} -->"
@@ -1210,7 +1249,7 @@ def _replace_pptx_images(
 
         coords_suffix = ""
         if coordinate_text:
-            coords_suffix = f"<br>**Coordinates:** {coordinate_text}"
+            coords_suffix = f"<br>**Position:** {coordinate_text}"
         if line.lstrip().startswith("|"):
             parts = []
             if text:
@@ -1227,7 +1266,7 @@ def _replace_pptx_images(
         if note:
             pieces.append(note)
         if coordinate_text:
-            pieces.append(f"- **Coordinates:** {coordinate_text}")
+            pieces.append(f"- **Position:** {coordinate_text}")
         if not pieces:
             return f"<!-- image omitted: {label} -->"
         return "\n\n" + "\n\n".join(pieces) + "\n\n"
@@ -1322,6 +1361,8 @@ def convert_pptx(
                 engine,
                 use_ocr,
                 image_coords,
+                int(meta.get("width", 0)),
+                int(meta.get("height", 0)),
             )
             chunk = _append_pptx_slide_meta(chunk, meta)
             body = f"<!-- slide {index + 1} of {total} -->"

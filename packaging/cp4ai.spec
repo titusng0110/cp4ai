@@ -32,6 +32,7 @@ for package in (
     "psutil",
     "yaml",
     "onnxruntime",
+    "ftfy",
 ):
     package_datas, _package_binaries, package_hidden = collect_all(package)
     datas += package_datas
