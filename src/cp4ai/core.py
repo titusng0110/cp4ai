@@ -40,9 +40,7 @@ Usage
 Reproducible environment
 ------------------------
     Python 3.13
-    pymupdf==1.28.2
-    pymupdf4llm==1.28.2
-    pymupdf-layout==1.28.2
+    pymupdf==2.1
     Pandoc 3.14                 (bundled in the macOS app; CLI uses pandoc)
     numpy==2.5.5
     tabulate==0.10.0
@@ -77,11 +75,9 @@ from xml.etree import ElementTree as ET
 import numpy as np
 import pymupdf
 
-pymupdf.no_recommend_layout()
+pymupdf.use_layout(True)
 
 logger = logging.getLogger(__name__)
-
-import pymupdf4llm
 
 from .pandoc import pandoc_binary, pandoc_version
 from .progress import ocr_done, page_done
@@ -1531,8 +1527,8 @@ def convert_pdf(
 ) -> str:
     doc = pymupdf.open(path)
     try:
-        chunks = pymupdf4llm.to_markdown(
-            doc, page_chunks=True, show_progress=False, use_ocr=False
+        chunks = doc.to_markdown(
+            page_chunks=True, show_progress=False, use_ocr=False
         )
         parts: list[str] = []
         ocr_pages = 0
@@ -1567,7 +1563,7 @@ def convert_pdf(
         path,
         "pdf",
         pages=len(chunks),
-        text_extraction=f"pymupdf4llm {pymupdf4llm.__version__}",
+        text_extraction=f"pymupdf {pymupdf.__version__}",
         images_ocr=(
             f"{ocr_engine_label(engine)} ({ocr_pages} page(s) with OCR text)"
             if use_ocr

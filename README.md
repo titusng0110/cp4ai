@@ -277,8 +277,8 @@ annotations when called from an ordinary background thread.
 
 ### PDF
 
-1. `pymupdf4llm` extracts the native text layer page by page with its own OCR
-   disabled.
+1. PyMuPDF extracts the native text layer page by page with its layout engine
+   and its own OCR disabled.
 2. Every page is marked `<!-- page N of M -->`.
 3. Text that exists only inside images is OCR'd and appended on the same page,
    under a clearly marked OCR comment.
