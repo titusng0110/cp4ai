@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import __version__
 from .core import TESSDATA_DIR, convert_docx, convert_pdf, convert_pptx
+from .pipeline import check_pandoc, check_tesseract
 
 SOURCE_SUFFIXES = {".docx", ".pdf", ".pptx"}
 HOMEBREW_COMMANDS = (
@@ -21,16 +22,21 @@ HOMEBREW_COMMANDS = (
 
 
 def install_homebrew_dependencies(engine: str) -> None:
-    """Install missing helpers; Tesseract only when explicitly requested."""
+    """Install the niche vector-image helpers when OCR is enabled.
+
+    Pandoc and Tesseract are deliberately not installed here: CLI users
+    supply Pandoc themselves, and Tesseract is opt-in via ``--tesseract``.
+    """
     if engine == "none" or sys.platform != "darwin" or os.environ.get("CP4AI_SKIP_SETUP"):
         return
     brew = shutil.which("brew")
     if not brew:
         return
-    commands = list(HOMEBREW_COMMANDS)
-    if engine == "tesseract":
-        commands.append(("tesseract", "tesseract"))
-    missing = [package for command, package in commands if not shutil.which(command)]
+    missing = [
+        package
+        for command, package in HOMEBREW_COMMANDS
+        if not shutil.which(command)
+    ]
     if not missing:
         return
     print(f"Installing Homebrew dependencies: {' '.join(missing)}", flush=True)
@@ -207,7 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="ocr_engine",
         action="store_const",
         const="tesseract",
-        help="OCR with Tesseract instead of Live Text (installs it if missing)",
+        help="OCR with Tesseract instead of Live Text (requires: brew install tesseract)",
     )
     engines.add_argument(
         "--no-ocr",
@@ -223,7 +229,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    install_homebrew_dependencies(args.ocr_engine)
 
     target = args.target.expanduser()
     try:
@@ -232,8 +237,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     if not sources:
-        print(f"ERROR: no .docx or .pdf files found under {target}", file=sys.stderr)
+        print(f"ERROR: no .docx/.pdf/.pptx files found under {target}", file=sys.stderr)
         return 1
+
+    for problem in (check_pandoc(sources), check_tesseract(args.ocr_engine)):
+        if problem:
+            print(f"ERROR: {problem}", file=sys.stderr)
+            return 1
+
+    install_homebrew_dependencies(args.ocr_engine)
 
     try:
         planned = plan_outputs(sources, target, args.out)

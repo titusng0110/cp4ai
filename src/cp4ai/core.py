@@ -41,13 +41,15 @@ Reproducible environment
 ------------------------
     Python 3.13
     pymupdf==1.28.2
-    pymupdf4llm==0.3.4
-    pypandoc-binary==1.17        (bundles Pandoc 3.9)
+    pymupdf4llm==1.28.2
+    pymupdf-layout==1.28.2
+    Pandoc 3.14                 (bundled in the macOS app; CLI uses pandoc)
     numpy==2.5.5
     tabulate==0.10.0
     ocrmac==1.0.1                (Apple Live Text; macOS Sonoma+)
     pillow==13.0.0
     tiktoken==0.14.0
+    psutil==7.2.2
     Tesseract 5.5.4              (optional; --tesseract)
 """
 
@@ -56,6 +58,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import logging
 import os
 import posixpath
 import re
@@ -76,8 +79,12 @@ import pymupdf
 
 pymupdf.no_recommend_layout()
 
+logger = logging.getLogger(__name__)
+
 import pymupdf4llm
-import pypandoc
+
+from .pandoc import pandoc_binary, pandoc_version
+from .progress import ocr_done, page_done
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = PACKAGE_DIR.parents[1] if len(PACKAGE_DIR.parents) > 1 else PACKAGE_DIR
@@ -147,10 +154,13 @@ def md_title(path: Path) -> str:
 
 def display_path(path: Path) -> str:
     """Prefer a working-directory-relative path so the Markdown stays portable."""
-    try:
-        return path.resolve().relative_to(Path.cwd()).as_posix()
-    except ValueError:
-        return path.as_posix()
+    cwd = Path.cwd()
+    if cwd != Path("/"):
+        try:
+            return path.resolve().relative_to(cwd).as_posix()
+        except ValueError:
+            pass
+    return path.resolve().as_posix()
 
 
 def front_matter(path: Path, source_format: str, **extra: object) -> str:
@@ -575,7 +585,16 @@ def ocr_image_livetext(path: Path) -> str:
     ).recognize()
     # Live Text bounding boxes use a bottom-left origin.
     lines = sorted(annotations, key=lambda item: (-item[2][1], item[2][0]))
-    return "\n".join(text.strip() for text, _, _ in lines if text.strip()).strip()
+    text = "\n".join(text.strip() for text, _, _ in lines if text.strip()).strip()
+    logger.info(
+        "livetext: %s size=%s annotations=%d text_len=%d first=%r",
+        path,
+        flattened.size,
+        len(annotations),
+        len(text),
+        text[:80],
+    )
+    return text
 
 
 def ocr_image(
@@ -659,15 +678,24 @@ def extract_emf_plus_bitmap(emf_path: Path, out_png: Path) -> bool:
 
 
 def svg_to_png(svg_path: Path, out_png: Path, width: int = 2400) -> bool:
-    if not shutil.which("rsvg-convert"):
+    rsvg = shutil.which("rsvg-convert")
+    logger.info("svg_to_png: rsvg=%r svg=%s", rsvg, svg_path)
+    if not rsvg:
         return False
     proc = subprocess.run(
-        ["rsvg-convert", str(svg_path), "-o", str(out_png), "--width", str(width)],
+        [rsvg, str(svg_path), "-o", str(out_png), "--width", str(width)],
         check=False,
         capture_output=True,
         text=True,
     )
-    return proc.returncode == 0 and out_png.exists() and out_png.stat().st_size > 0
+    ok = proc.returncode == 0 and out_png.exists() and out_png.stat().st_size > 0
+    logger.info(
+        "svg_to_png: rc=%d ok=%s stderr=%r",
+        proc.returncode,
+        ok,
+        proc.stderr[:300],
+    )
+    return ok
 
 
 def vector_to_png(source: Path, out_png: Path, workdir: Path) -> bool:
@@ -679,6 +707,7 @@ def vector_to_png(source: Path, out_png: Path, workdir: Path) -> bool:
         svg_path = source if suffix == ".svg" else workdir / f"{source.stem}_vector.svg"
         if suffix == ".emf":
             converter = shutil.which("emf2svg-conv")
+            logger.info("vector_to_png: emf2svg=%r source=%s", converter, source)
             if not converter:
                 return False
             proc = subprocess.run(
@@ -686,6 +715,12 @@ def vector_to_png(source: Path, out_png: Path, workdir: Path) -> bool:
                 check=False,
                 capture_output=True,
                 text=True,
+            )
+            logger.info(
+                "vector_to_png: emf rc=%d exists=%s stderr=%r",
+                proc.returncode,
+                svg_path.exists(),
+                proc.stderr[:300],
             )
             if proc.returncode != 0 or not svg_path.exists():
                 return False
@@ -774,6 +809,7 @@ def replace_docx_images(
         if not use_ocr:
             return "", label, f"<!-- image omitted: {label} (OCR disabled) -->"
         text = ocr_image_file(image_path, workdir, counter, tessdata_dir, cache, engine)
+        ocr_done()
         if text and useful_ocr(text):
             return text, label, None
         if image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
@@ -867,6 +903,7 @@ def figures_section(
             continue
         index += 1
         text = ocr_image_file(image_path, workdir, index, tessdata_dir, cache, engine)
+        ocr_done()
         if text and useful_ocr(text):
             figures.append((image_path.name, text))
         elif image_path.suffix.lower() in {".emf", ".wmf", ".svg"}:
@@ -916,7 +953,7 @@ def convert_docx(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cp4ai_docx_") as tmp:
         workdir = Path(tmp)
-        pandoc = pypandoc.get_pandoc_path()
+        pandoc = pandoc_binary()
         cmd = [
             pandoc,
             str(path.resolve()),
@@ -945,12 +982,13 @@ def convert_docx(
         header = extract_docx_header(path)
         comments = extract_docx_comments(path)
         body, unplaced_comments = insert_comments_inline(body, comments)
+        page_done()
 
     pieces = [
         front_matter(
             path,
             "docx",
-            converter="pandoc 3.9 (pypandoc 1.17)",
+            converter=f"pandoc {pandoc_version()}",
             header=header or None,
             comments=len(comments) if comments else None,
             images_ocr=ocr_engine_label(engine),
@@ -1167,6 +1205,7 @@ def _replace_pptx_images(
             text = ocr_image_file(
                 image_path, workdir, counter, tessdata_dir, cache, engine
             )
+            ocr_done()
             note = "" if text.strip() else f"<!-- image omitted: {label} (no readable text detected) -->"
 
         line_start = markdown.rfind("\n", 0, match.start()) + 1
@@ -1245,7 +1284,7 @@ def convert_pptx(
     metadata = _pptx_metadata(path)
     with tempfile.TemporaryDirectory(prefix="cp4ai_pptx_") as tmp:
         workdir = Path(tmp)
-        pandoc = pypandoc.get_pandoc_path()
+        pandoc = pandoc_binary()
         proc = subprocess.run(
             [
                 pandoc,
@@ -1293,13 +1332,14 @@ def convert_pptx(
             if chunk:
                 body += f"\n\n{chunk}"
             rendered.append(body)
+            page_done()
 
     notes_count = sum(1 for meta in metadata if str(meta.get("notes", "")).strip())
     comments_count = sum(len(meta.get("comments", [])) for meta in metadata)
     header = front_matter(
         path,
         "pptx",
-        converter="pandoc 3.9 (pypandoc 1.17)",
+        converter=f"pandoc {pandoc_version()}",
         slides=len(metadata) or total,
         notes=notes_count or None,
         comments=comments_count or None,
@@ -1343,19 +1383,14 @@ def merge_boxes(boxes: Iterable[pymupdf.Rect], gap: float = 6.0) -> list[pymupdf
         pending = merged
 
 
-def ocr_page_images(
+def page_image_boxes(
     page: pymupdf.Page,
-    page_number: int,
-    workdir: Path,
-    cache: dict[tuple, str],
-    tessdata_dir: Path | None,
-    native_text: str,
-    engine: str = DEFAULT_OCR_ENGINE,
-) -> str:
+) -> tuple[list[pymupdf.Rect], list[pymupdf.Rect], int]:
     page_area = page.rect.get_area()
     foreground: list[pymupdf.Rect] = []
     background: list[pymupdf.Rect] = []
-    for info in page.get_image_info(xrefs=True):
+    infos = page.get_image_info(xrefs=True)
+    for info in infos:
         box = pymupdf.Rect(info["bbox"]) & page.rect
         if box.is_empty or box.width < 80 or box.height < 40:
             continue
@@ -1367,6 +1402,81 @@ def ocr_page_images(
             background.append(box)
         else:
             foreground.append(box)
+    return foreground, background, len(infos)
+
+
+def count_pages(path: Path) -> int:
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        with pymupdf.open(path) as doc:
+            return doc.page_count
+    if suffix == ".pptx":
+        with zipfile.ZipFile(path) as zf:
+            return len(_pptx_slide_parts(zf))
+    if suffix == ".docx":
+        return 1
+    return 0
+
+
+def _count_pdf_ocr_jobs(path: Path) -> int:
+    jobs = 0
+    with pymupdf.open(path) as doc:
+        for page in doc:
+            foreground, background, _ = page_image_boxes(page)
+            jobs += len(merge_boxes(foreground))
+            if background and len(token_set(page.get_text())) < 40:
+                jobs += len(merge_boxes(background))
+    return jobs
+
+
+def _count_docx_ocr_jobs(path: Path) -> int:
+    image_suffixes = {
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp",
+        ".emf", ".wmf", ".svg",
+    }
+    with zipfile.ZipFile(path) as zf:
+        return sum(
+            1
+            for name in zf.namelist()
+            if name.startswith("word/media/")
+            and Path(name).suffix.lower() in image_suffixes
+        )
+
+
+def _count_pptx_ocr_jobs(path: Path) -> int:
+    total = 0
+    with zipfile.ZipFile(path) as zf:
+        for part in _pptx_slide_parts(zf):
+            root = ET.fromstring(zf.read(part))
+            for picture in root.iter(P_NS + "pic"):
+                blip = picture.find(f"{P_NS}blipFill/{A_NS}blip")
+                if blip is not None and blip.get(R_NS + "embed"):
+                    total += 1
+    return total
+
+
+def count_ocr_jobs(path: Path) -> int:
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        return _count_pdf_ocr_jobs(path)
+    if suffix == ".docx":
+        return _count_docx_ocr_jobs(path)
+    if suffix == ".pptx":
+        return _count_pptx_ocr_jobs(path)
+    return 0
+
+
+def ocr_page_images(
+    page: pymupdf.Page,
+    page_number: int,
+    workdir: Path,
+    cache: dict[tuple, str],
+    tessdata_dir: Path | None,
+    native_text: str,
+    engine: str = DEFAULT_OCR_ENGINE,
+) -> str:
+    foreground, background, info_count = page_image_boxes(page)
+    logger.info("page %d: image_infos=%d", page_number, info_count)
 
     def run_boxes(boxes: list[pymupdf.Rect], offset: int) -> list[str]:
         results: list[str] = []
@@ -1384,10 +1494,18 @@ def ocr_page_images(
                 pix.save(image_path)
                 text = ocr_image(image_path, tessdata_dir, engine)
                 cache[cache_key] = text
+            ocr_done()
             if text and useful_ocr(text):
                 results.append(text)
         return results
 
+    logger.info(
+        "page %d: foreground=%d background=%d native_tokens=%d",
+        page_number,
+        len(foreground),
+        len(background),
+        len(token_set(native_text)),
+    )
     native_tokens = len(token_set(native_text))
     regions: list[str] = []
     if foreground:
@@ -1413,7 +1531,9 @@ def convert_pdf(
 ) -> str:
     doc = pymupdf.open(path)
     try:
-        chunks = pymupdf4llm.to_markdown(doc, page_chunks=True, show_progress=False)
+        chunks = pymupdf4llm.to_markdown(
+            doc, page_chunks=True, show_progress=False, use_ocr=False
+        )
         parts: list[str] = []
         ocr_pages = 0
         cache: dict[tuple, str] = {}
@@ -1439,6 +1559,7 @@ def convert_pdf(
                 parts.append(
                     f"<!-- page {page_index + 1} of {len(chunks)} -->\n\n{page_body.strip()}"
                 )
+                page_done()
     finally:
         doc.close()
 
@@ -1446,7 +1567,7 @@ def convert_pdf(
         path,
         "pdf",
         pages=len(chunks),
-        text_extraction="pymupdf4llm 0.3.4",
+        text_extraction=f"pymupdf4llm {pymupdf4llm.__version__}",
         images_ocr=(
             f"{ocr_engine_label(engine)} ({ocr_pages} page(s) with OCR text)"
             if use_ocr
