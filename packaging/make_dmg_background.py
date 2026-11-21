@@ -34,7 +34,7 @@ def main() -> int:
         fill=INK,
     )
 
-    subtitle = "Then open it once to install the Quick Actions and command-line tools"
+    subtitle = "Then open it once to install Finder Services and command-line tools"
     subtitle_font = font(40, bold=True)
     subtitle_width = draw.textlength(subtitle, font=subtitle_font)
     draw.text(

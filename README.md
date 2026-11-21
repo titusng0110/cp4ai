@@ -11,9 +11,9 @@ interpret them; silently dropping a sentence or a table row is not.
 
 Copy 4 AI gives you four ways to work:
 
-- **Copy 4 AI** — a Finder Quick Action that converts files and copies the
+- **Copy 4 AI** — a Finder Service that converts files and copies the
   result to the clipboard.
-- **Copy 4 AI (no OCR)** — the same action without reading text from images,
+- **Copy 4 AI (no OCR)** — the same service without reading text from images,
   useful when the files already have a good text layer.
 - **`cp4ai`** — the clipboard workflow from a terminal.
 - **`md4ai`** — the same conversion, written to `.md` files instead.
@@ -42,8 +42,7 @@ Released under the MIT License. Bundled third-party components are listed in
 
 That first launch does the rest:
 
-- registers **Copy 4 AI** and **Copy 4 AI (no OCR)** in Finder → Quick
-  Actions;
+- registers **Copy 4 AI** and **Copy 4 AI (no OCR)** in Finder → Services;
 - installs `~/.local/bin/cp4ai` and `~/.local/bin/md4ai`;
 - adds `~/.local/bin` to your `PATH` in `~/.zprofile`.
 
@@ -55,9 +54,10 @@ Anyway). Running it directly from the mounted DMG shows a warning; install it
 in Applications first.
 
 The welcome dialog is shown whenever you double-click the app. It is only a
-reminder; the app has no main window.
+reminder; the app has no main window. In Finder, the commands live under
+right-click → **Services**.
 
-### If Finder does not show the Quick Actions
+### If Finder does not show the Services
 
 Launch the app once, then relaunch Finder. You can also refresh the Services
 database manually:
@@ -69,7 +69,7 @@ database manually:
 ### Update
 
 Quit the app, replace it in Applications with the new version, and open it
-once. The Quick Actions, command-line links and PATH entry are refreshed
+once. The Services, command-line links and PATH entry are refreshed
 automatically.
 
 ### Uninstall
@@ -80,7 +80,7 @@ rm -f "$HOME/.local/bin/cp4ai" "$HOME/.local/bin/md4ai"
 ```
 
 Then remove the block marked `Copy 4 AI command-line tools` from
-`~/.zprofile`. The Finder Quick Actions disappear after Finder refreshes its
+`~/.zprofile`. The Finder Services disappear after Finder refreshes its
 Services list.
 
 ### Build from source
@@ -111,10 +111,10 @@ Logs are written to `~/Library/Logs/Copy 4 AI.log`.
 
 ## 3. Usage
 
-### Finder Quick Actions
+### Finder Services
 
 1. Select one or more `.docx`, `.pdf` or `.pptx` files in Finder.
-2. Right-click → **Quick Actions**.
+2. Right-click → **Services**.
 3. Choose **Copy 4 AI** (read text from images too) or **Copy 4 AI (no OCR)**
    (faster; images are skipped).
 4. When the progress panel finishes, paste into your AI chat.
@@ -215,7 +215,7 @@ Image files themselves are never copied into the Markdown.
 
 ```text
 Copy 4 AI.app
-├── Copy 4 AI          AppKit Quick Action handler + progress panel
+├── Copy 4 AI          AppKit Services handler + progress panel
 ├── cp4ai              CLI (also invoked as md4ai)
 └── Contents/Resources
     ├── bin/           pandoc, rsvg-convert, emf2svg-conv + dylibs
@@ -310,7 +310,7 @@ match tiktoken without shipping the Python package.
 
 ### Parallelism and progress
 
-The CLI defaults to one worker per active CPU core. The Quick Actions use
+The CLI defaults to one worker per active CPU core. The Services use
 `min(cpu cores, 6)` so Vision does not exhaust memory. `--jobs N` overrides
 the CLI default.
 

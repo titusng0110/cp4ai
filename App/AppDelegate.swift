@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         beginBatch(urls, useOCR: true)
     }
 
-    /// Finder Quick Action entry point (`NSMessage = copy4AI`).
+    /// Finder Service entry point (`NSMessage = copy4AI`).
     @objc func copy4AI(
         _ pasteboard: NSPasteboard,
         userData: String,
@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         handleService(pasteboard, error: error, useOCR: true)
     }
 
-    /// Finder Quick Action entry point (`NSMessage = copy4AINoOCR`).
+    /// Finder Service entry point (`NSMessage = copy4AINoOCR`).
     @objc func copy4AINoOCR(
         _ pasteboard: NSPasteboard,
         userData: String,
@@ -199,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Shown when the app is opened directly (not by a Quick Action).
+    /// Shown when the app is opened directly (not by a Finder Service).
     private func showWelcome() {
         guard !welcomeVisible, !busy else { return }
         welcomeVisible = true
@@ -209,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.window.title = "Copy 4 AI"
         alert.messageText = "Copy 4 AI is now installed!"
         alert.informativeText = """
-        You can use "Copy 4 AI" and "Copy 4 AI (no OCR)" in Finder's Quick Actions
+        You can use "Copy 4 AI" and "Copy 4 AI (no OCR)" in Finder > Services
         or use "cp4ai" and "md4ai" as command line tools.
         """
         alert.addButton(withTitle: "OK")
