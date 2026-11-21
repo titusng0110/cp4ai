@@ -260,7 +260,10 @@ all OCR, text merging and Markdown assembly.
 3. Swift OCRs foreground regions first. If a page has little native text and
    the foreground result is thin, the full-page background image is OCR'd as a
    fallback.
-4. OCR that only repeats the native text layer is removed.
+4. OCR is removed only when its whitespace-stripped text is an ordered
+   subsequence of the whitespace-stripped native text layer for that page.
+   Case, punctuation and duplicate characters still matter; a bag-of-words
+   match is not enough.
 5. Pages are marked `<!-- page N of M -->`; OCR text is appended on the same
    page under a marked comment.
 
@@ -289,7 +292,22 @@ at accurate recognition level with language correction enabled.
 - Each page/region result is cached by a SHA-256 of its pixels, so identical
   regions are never OCR'd twice.
 - OCR is dropped only when an image yields fewer than 10 non-space characters,
-  or when its words are already present in the native text layer.
+  or when its whitespace-stripped text is an ordered subsequence of the
+  whitespace-stripped native text layer for that page.
+
+### Text-layer deduplication
+
+PDF OCR is compared with the **same page's** native text layer after removing
+all Unicode whitespace from both strings. OCR is discarded only when the
+stripped OCR text is an **ordered subsequence** of the stripped native text:
+every OCR character must appear in the native text in the same order, although
+the characters do not need to be contiguous.
+
+Case, punctuation and repeated characters still matter. For example, native
+`the court may adjourn` and OCR `court adjourn` deduplicate because
+`courtadjourn` is an ordered subsequence of `thecourtmayadjourn`. OCR
+`adjourn court` does not deduplicate because the order is wrong. This replaces
+the older token-set check, which ignored word order, case and word boundaries.
 
 ### Vector images
 

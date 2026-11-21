@@ -52,11 +52,12 @@ public enum DocxMetadata {
 
         for paragraph in XMLTools.paragraphs(document, namespace: wordNamespace) {
             var ids: [String] = []
-            for element in XMLTools.elements(in: paragraph, localName: "commentRangeStart", namespace: wordNamespace) {
-                if let id = XMLTools.attribute(element, "id") { ids.append(id) }
-            }
-            for element in XMLTools.elements(in: paragraph, localName: "commentReference", namespace: wordNamespace) {
-                if let id = XMLTools.attribute(element, "id") { ids.append(id) }
+            for element in XMLTools.allElements(in: paragraph) {
+                guard element.uri == wordNamespace else { continue }
+                if element.localName == "commentRangeStart" || element.localName == "commentReference",
+                   let id = XMLTools.attribute(element, "id") {
+                    ids.append(id)
+                }
             }
             guard !ids.isEmpty else { continue }
             let text = XMLTools.text(of: paragraph, namespace: wordNamespace)

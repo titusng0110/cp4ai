@@ -76,6 +76,22 @@ public enum EMFPlusExtractor {
 
         let payload = data.subdata(in: payloadStart..<(payloadStart + byteCount))
         var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        let hasAlpha = stride == width * 4
+        var maxAlpha: UInt8 = 0
+
+        if hasAlpha {
+            payload.withUnsafeBytes { buffer in
+                guard let base = buffer.bindMemory(to: UInt8.self).baseAddress else { return }
+                for row in 0..<height {
+                    let rowStart = row * stride
+                    for column in 0..<width {
+                        let alpha = base[rowStart + column * 4 + 3]
+                        if alpha > maxAlpha { maxAlpha = alpha }
+                    }
+                }
+            }
+        }
+        let compositeAlpha = hasAlpha && maxAlpha != 0
 
         payload.withUnsafeBytes { buffer in
             guard let base = buffer.bindMemory(to: UInt8.self).baseAddress else { return }
@@ -86,12 +102,9 @@ public enum EMFPlusExtractor {
                     let blue = base[index]
                     let green = base[index + 1]
                     let red = base[index + 2]
-                    var alpha = stride == width * 4 ? base[index + 3] : 255
-                    if stride == width * 4, alpha == 0 {
-                        alpha = 255
-                    }
+                    let alpha = hasAlpha ? base[index + 3] : 255
                     let output = (row * width + column) * 4
-                    if stride == width * 4, alpha != 255 {
+                    if compositeAlpha, alpha != 255 {
                         let alphaFactor = Int(alpha)
                         rgba[output] = UInt8(min(255, Int(red) * alphaFactor / 255 + (255 - alphaFactor)))
                         rgba[output + 1] = UInt8(min(255, Int(green) * alphaFactor / 255 + (255 - alphaFactor)))

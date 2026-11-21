@@ -78,6 +78,17 @@ public enum XMLTools {
         return result
     }
 
+    /// All descendant elements in document order, including nested elements.
+    public static func allElements(in node: XMLNode) -> [XMLElement] {
+        var result: [XMLElement] = []
+        for child in node.children ?? [] {
+            guard let element = child as? XMLElement else { continue }
+            result.append(element)
+            result.append(contentsOf: allElements(in: element))
+        }
+        return result
+    }
+
     public static func descendants(_ element: XMLElement, localName: String, namespace: String? = nil) -> [XMLElement] {
         elements(in: element, localName: localName, namespace: namespace)
     }

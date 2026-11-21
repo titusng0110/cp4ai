@@ -129,6 +129,29 @@ public enum TextTools {
         text.replacingOccurrences(of: "\\s+", with: "", options: .regularExpression).count >= 10
     }
 
+    /// True when `candidate` appears in `text` in order after all Unicode
+    /// whitespace is removed from both strings.
+    ///
+    /// This is deliberately exact: case, punctuation and duplicate characters
+    /// matter. It is used to drop OCR only when the recognized image text is
+    /// already present, in order, in the same page's native text layer.
+    public static func isOrderedSubsequenceAfterStrippingWhitespace(
+        _ candidate: String,
+        of text: String
+    ) -> Bool {
+        let needle = candidate.filter { !$0.isWhitespace }
+        guard !needle.isEmpty else { return true }
+
+        var index = needle.startIndex
+        for character in text where !character.isWhitespace {
+            if character == needle[index] {
+                index = needle.index(after: index)
+                if index == needle.endIndex { return true }
+            }
+        }
+        return false
+    }
+
     public static func htmlEscape(_ text: String) -> String {
         text
             .replacingOccurrences(of: "&", with: "&amp;")

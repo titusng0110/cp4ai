@@ -127,7 +127,7 @@ public final class ConversionEngine {
         let tokens = tokenizer?.count(markdown) ?? 0
         return BatchResult(
             markdown: markdown,
-            characters: markdown.count,
+            characters: markdown.unicodeScalars.count,
             tokens: tokens,
             files: sources
         )

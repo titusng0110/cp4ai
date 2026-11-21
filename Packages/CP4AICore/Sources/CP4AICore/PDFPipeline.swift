@@ -38,7 +38,8 @@ public final class PDFPipeline {
             var ocrText = ""
             if useOCR {
                 ocrText = ocrPage(page, outputDirectory: regions.url, nativeText: native)
-                if !ocrText.isEmpty, TextTools.tokenSet(ocrText).isSubset(of: TextTools.tokenSet(native)) {
+                if !ocrText.isEmpty,
+                   TextTools.isOrderedSubsequenceAfterStrippingWhitespace(ocrText, of: native) {
                     ocrText = ""
                 }
             }

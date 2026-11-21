@@ -27,4 +27,43 @@ final class TextToolsTests: XCTestCase {
         let names = ["slide10", "slide2", "slide1"]
         XCTAssertEqual(names.sorted { TextTools.naturalCompare($0, $1) }, ["slide1", "slide2", "slide10"])
     }
+
+    func testOrderedSubsequenceAfterStrippingWhitespace() {
+        XCTAssertFalse(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "Hello world",
+                of: "hello\nworld"
+            )
+        )
+        XCTAssertTrue(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "Helloworld",
+                of: "Hello world"
+            )
+        )
+        XCTAssertTrue(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "ac",
+                of: "a b c"
+            )
+        )
+        XCTAssertFalse(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "worldhello",
+                of: "Hello world"
+            )
+        )
+        XCTAssertFalse(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "hello",
+                of: "HELLO"
+            )
+        )
+        XCTAssertTrue(
+            TextTools.isOrderedSubsequenceAfterStrippingWhitespace(
+                "a\u{00A0}b",
+                of: "a b"
+            )
+        )
+    }
 }
