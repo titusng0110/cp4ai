@@ -11,8 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let progress = ProgressController()
     private var busy = false
     private var pending: [PendingBatch] = []
-    private var idleExit: DispatchWorkItem?
     private var quickActionReceived = false
+    private var welcomeTimer: DispatchWorkItem?
+    private var welcomeAlert: NSAlert?
+    private var welcomeVisible = false
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = self
@@ -31,13 +33,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         removeLegacyQuickAction()
         CLIInstaller.installIfNeeded()
-        scheduleIdleExit()
+        scheduleWelcome()
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !busy, !quickActionReceived {
+            showWelcome()
+        }
+        return true
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         quickActionReceived = true
-        idleExit?.cancel()
-        idleExit = nil
+        cancelWelcome()
         beginBatch(urls, useOCR: true)
     }
 
@@ -65,8 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         useOCR: Bool
     ) {
         quickActionReceived = true
-        idleExit?.cancel()
-        idleExit = nil
+        cancelWelcome()
 
         let objects = pasteboard.readObjects(
             forClasses: [NSURL.self],
@@ -172,15 +179,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Leave the panel open so the user can read the error.
     }
 
-    private func scheduleIdleExit() {
+    private func scheduleWelcome() {
         guard !quickActionReceived else { return }
-        idleExit?.cancel()
+        welcomeTimer?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.busy, self.pending.isEmpty else { return }
+            guard let self, !self.quickActionReceived, !self.busy else { return }
+            self.showWelcome()
+        }
+        welcomeTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+    }
+
+    private func cancelWelcome() {
+        welcomeTimer?.cancel()
+        welcomeTimer = nil
+        if welcomeVisible {
+            NSApp.stopModal(withCode: .OK)
+            welcomeAlert?.window.orderOut(nil)
+        }
+    }
+
+    /// Shown when the app is opened directly (not by a Quick Action).
+    private func showWelcome() {
+        guard !welcomeVisible, !busy else { return }
+        welcomeVisible = true
+        AppLog.write("showing install welcome")
+        let alert = NSAlert()
+        welcomeAlert = alert
+        alert.window.title = "Copy 4 AI"
+        alert.messageText = "Copy 4 AI is now installed!"
+        alert.informativeText = """
+        You can use "Copy 4 AI" and "Copy 4 AI (no OCR)" in Finder's Quick Actions
+        or use "cp4ai" and "md4ai" as command line tools.
+        """
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        welcomeVisible = false
+        welcomeAlert = nil
+        if !quickActionReceived {
             NSApp.terminate(nil)
         }
-        idleExit = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
     }
 
     /// The 3.x app installed an Automator workflow. The Swift app provides the
