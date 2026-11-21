@@ -66,7 +66,10 @@ public final class PDFHelperClient {
     private func run(_ arguments: [String]) throws -> String {
         guard let helper = resources.pdfHelper else {
             throw ConversionError.missingTool(
-                "the bundled PDF helper is missing. Build it with packaging/build_pdf_helper.sh."
+                "the bundled PDF helper is missing from this copy of Copy 4 AI. "
+                    + "Reinstall the app, or build it with "
+                    + "packaging/build_pdf_helper.sh in a development checkout. "
+                    + "Resources: \(resources.root.path)"
             )
         }
         let process = try ProcessRunner.run(helper, arguments)

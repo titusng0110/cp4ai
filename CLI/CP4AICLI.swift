@@ -55,13 +55,16 @@ public enum CP4AICLI {
             ocrLanguages: arguments.languages
         )
         let engine = ConversionEngine(options: options)
+        let printer = OrderedFileProgress { _, _, source, details, error in
+            if let error {
+                fputs("[\(source.lastPathComponent)] FAILED: \(error)\n", stderr)
+            } else if let details {
+                print("[done] \(source.lastPathComponent) (\(details))")
+            }
+        }
         let progress: ProgressHandler = { event in
-            if case let .fileFinished(_, _, source, details, error) = event {
-                if let error {
-                    fputs("[\(source.lastPathComponent)] FAILED: \(error)\n", stderr)
-                } else if let details {
-                    print("[done] \(source.lastPathComponent) (\(details))")
-                }
+            if case let .fileFinished(index, total, source, details, error) = event {
+                printer.add(index: index, total: total, source: source, details: details, error: error)
             }
         }
 
@@ -120,13 +123,16 @@ public enum CP4AICLI {
             ocrLanguages: arguments.languages
         )
         let engine = ConversionEngine(options: options)
+        let printer = OrderedFileProgress { index, total, source, details, error in
+            if let error {
+                fputs("[\(index)/\(total)] FAILED \(source.path): \(error)\n", stderr)
+            } else if let details, index - 1 < planned.count {
+                print("[\(index)/\(total)] \(source.path) -> \(planned[index - 1].output.path) (\(details))")
+            }
+        }
         let progress: ProgressHandler = { event in
             if case let .fileFinished(index, total, source, details, error) = event {
-                if let error {
-                    fputs("[\(index)/\(total)] FAILED \(source.path): \(error)\n", stderr)
-                } else if let details, index - 1 < planned.count {
-                    print("[\(index)/\(total)] \(source.path) -> \(planned[index - 1].output.path) (\(details))")
-                }
+                printer.add(index: index, total: total, source: source, details: details, error: error)
             }
         }
 
@@ -258,6 +264,15 @@ public enum CP4AICLI {
                 index += 1
                 continue
             }
+            if mode == .md4ai, argument.hasPrefix("-"), !argument.hasPrefix("--"), argument.count > 2 {
+                let flags = argument.dropFirst()
+                if flags.allSatisfy({ $0 == "r" || $0 == "f" }) {
+                    if flags.contains("r") { result.recursive = true }
+                    if flags.contains("f") { result.force = true }
+                    index += 1
+                    continue
+                }
+            }
             if argument == "-o" || argument == "--out" {
                 guard mode == .md4ai, index + 1 < args.count else {
                     throw CLIError("\(argument) needs a value")
@@ -386,4 +401,28 @@ private struct CLIError: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }
+}
+
+/// Buffers per-file results and prints them in input order even when files
+/// finish out of order with `--jobs > 1`.
+private final class OrderedFileProgress {
+    private let lock = NSLock()
+    private var next = 1
+    private var pending: [Int: (source: URL, details: String?, error: String?)] = [:]
+    private let emit: (Int, Int, URL, String?, String?) -> Void
+
+    init(_ emit: @escaping (Int, Int, URL, String?, String?) -> Void) {
+        self.emit = emit
+    }
+
+    func add(index: Int, total: Int, source: URL, details: String?, error: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        pending[index] = (source, details, error)
+        while let entry = pending[next] {
+            pending.removeValue(forKey: next)
+            emit(next, total, entry.source, entry.details, entry.error)
+            next += 1
+        }
+    }
 }

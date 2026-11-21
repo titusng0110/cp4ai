@@ -21,6 +21,14 @@ for command in xcodegen xcodebuild create-dmg python3 uv; do
     fi
 done
 
+mkdir -p "$ROOT/build"
+LOCK="$ROOT/build/.build.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+    echo "another build is already running (remove $LOCK if it crashed)" >&2
+    exit 1
+fi
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+
 echo "==> Fetching Pandoc, librsvg, libemf2svg and tokenizer data"
 python3 packaging/fetch_native.py
 
@@ -29,6 +37,9 @@ echo "==> Building the PyMuPDF helper"
 
 echo "==> Generating the Xcode project"
 xcodegen generate
+
+echo "==> Cleaning Xcode build products"
+rm -rf "$ROOT/build/DerivedData"
 
 echo "==> Building the app (Release)"
 xcodebuild \
@@ -43,8 +54,33 @@ xcodebuild \
     build
 
 APP="$ROOT/build/DerivedData/Build/Products/Release/Copy 4 AI.app"
-if [ ! -d "$APP" ]; then
-    echo "missing app bundle: $APP" >&2
+CLI_PRODUCT="$ROOT/build/DerivedData/Build/Products/Release/cp4ai"
+if [ ! -d "$APP" ] || [ ! -x "$CLI_PRODUCT" ]; then
+    echo "missing app bundle or CLI product" >&2
+    exit 1
+fi
+
+echo "==> Embedding the freshly built CLI"
+cp "$CLI_PRODUCT" "$APP/Contents/MacOS/cp4ai"
+chmod +x "$APP/Contents/MacOS/cp4ai"
+
+for required in \
+    "$APP/Contents/MacOS/cp4ai" \
+    "$APP/Contents/Resources/pdf-helper/cp4ai-pdf" \
+    "$APP/Contents/Resources/bin/pandoc" \
+    "$APP/Contents/Resources/bin/rsvg-convert" \
+    "$APP/Contents/Resources/bin/emf2svg-conv" \
+    "$APP/Contents/Resources/tiktoken" \
+    "$APP/Contents/Resources/fonts.conf"; do
+    if [ ! -e "$required" ]; then
+        echo "embedded resource missing: $required" >&2
+        exit 1
+    fi
+done
+
+EMBEDDED_VERSION="$("$APP/Contents/MacOS/cp4ai" --version | awk '{print $2}')"
+if [ "$EMBEDDED_VERSION" != "$VERSION" ]; then
+    echo "embedded CLI version mismatch: expected $VERSION, got $EMBEDDED_VERSION" >&2
     exit 1
 fi
 

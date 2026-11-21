@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Locations for every bundled tool and data file.
@@ -145,11 +146,21 @@ public struct CP4AIResources {
             candidates.append(resources)
         }
 
-        let executable = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+        let executable = (Bundle.main.executableURL
+            ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+            .resolvingSymlinksInPath()
         if let contents = executable.path.split(separator: "/").dropLast().last,
            contents == "MacOS" {
             let macos = executable.deletingLastPathComponent()
             candidates.append(macos.deletingLastPathComponent().appendingPathComponent("Resources"))
+        }
+
+        // The CLI may be invoked through a PATH symlink, so also ask Launch
+        // Services for the installed app.
+        if let installed = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: "com.titusng0110.cp4ai"
+        ) {
+            candidates.append(installed.appendingPathComponent("Contents/Resources"))
         }
 
         // Xcode Debug builds: <products>/Debug/Copy 4 AI.app/Contents/Resources
