@@ -1,0 +1,500 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0CE94EF59C8AA2DE8D074B0A /* CP4AICore in Frameworks */ = {isa = PBXBuildFile; productRef = A5B898E66732D3ADAFCBE84B /* CP4AICore */; };
+		1080CD90128DAB98E1A3CF15 /* ProgressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE87F26C0755D61216C84C5 /* ProgressController.swift */; };
+		44033D60F9D6B062399BBCF1 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403072C4AEEC74E9576CB7EE /* main.swift */; };
+		B06F4D250EBCE5F606C79950 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2500966C7F6E4CC10B10EC94 /* AppDelegate.swift */; };
+		B216D10FD21BB7B232E2A176 /* CP4AICore in Frameworks */ = {isa = PBXBuildFile; productRef = 745037E4AB74BEC21A96E4B8 /* CP4AICore */; };
+		BC2A738F25D9DE062F519CFC /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43BD5CF14BF8FDD87A2BD84A /* main.swift */; };
+		C83F397BC0197EEE404D1B29 /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D828B69FADCD5D0695DEB42 /* CLIInstaller.swift */; };
+		CE2FF8EAC872783D34650B6D /* CP4AICLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B4D3256266374F5724EA77 /* CP4AICLI.swift */; };
+		D035B5BA3249537AB1C1FE07 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0267839DA94C4EEBD5C61752 /* AppLog.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		28BFFAE5B31833B554258E1B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBB7A4ADA7C125CBA1865F7C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FCF176AA30BB120675087644;
+			remoteInfo = cp4ai;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0267839DA94C4EEBD5C61752 /* AppLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
+		19B4D3256266374F5724EA77 /* CP4AICLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CP4AICLI.swift; sourceTree = "<group>"; };
+		1D828B69FADCD5D0695DEB42 /* CLIInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstaller.swift; sourceTree = "<group>"; };
+		24550F767AECD80E6FABEB84 /* cp4ai */ = {isa = PBXFileReference; includeInIndex = 0; path = cp4ai; sourceTree = BUILT_PRODUCTS_DIR; };
+		2500966C7F6E4CC10B10EC94 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		2FD19718B7CADFE77EF6B864 /* Copy4AI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Copy4AI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		403072C4AEEC74E9576CB7EE /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		43BD5CF14BF8FDD87A2BD84A /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		5CE87F26C0755D61216C84C5 /* ProgressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressController.swift; sourceTree = "<group>"; };
+		E38BD617ECC51DC02659B870 /* CP4AICore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CP4AICore; path = Packages/CP4AICore; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		06B757224E7A5314F7295A3A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B216D10FD21BB7B232E2A176 /* CP4AICore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		423EF11921BD3D987741A231 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0CE94EF59C8AA2DE8D074B0A /* CP4AICore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		28C82E253A165A88FC2C2A55 /* CLI */ = {
+			isa = PBXGroup;
+			children = (
+				19B4D3256266374F5724EA77 /* CP4AICLI.swift */,
+				43BD5CF14BF8FDD87A2BD84A /* main.swift */,
+			);
+			path = CLI;
+			sourceTree = "<group>";
+		};
+		40DFC9986C85C3F1FC882AE1 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2500966C7F6E4CC10B10EC94 /* AppDelegate.swift */,
+				0267839DA94C4EEBD5C61752 /* AppLog.swift */,
+				1D828B69FADCD5D0695DEB42 /* CLIInstaller.swift */,
+				403072C4AEEC74E9576CB7EE /* main.swift */,
+				5CE87F26C0755D61216C84C5 /* ProgressController.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		61ED6BBCFB6C81F3D33E4957 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2FD19718B7CADFE77EF6B864 /* Copy4AI.app */,
+				24550F767AECD80E6FABEB84 /* cp4ai */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7EB9ABC3780EAF8D4894E731 = {
+			isa = PBXGroup;
+			children = (
+				40DFC9986C85C3F1FC882AE1 /* App */,
+				28C82E253A165A88FC2C2A55 /* CLI */,
+				DD1AA349BFFD913DF117E047 /* Packages */,
+				61ED6BBCFB6C81F3D33E4957 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DD1AA349BFFD913DF117E047 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				E38BD617ECC51DC02659B870 /* CP4AICore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		82792B2A034048B57A7BD0F4 /* Copy4AI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 225E3757357A74F9466B40BB /* Build configuration list for PBXNativeTarget "Copy4AI" */;
+			buildPhases = (
+				2AB0F77EFF0448F79CD85EC0 /* Sources */,
+				06B757224E7A5314F7295A3A /* Frameworks */,
+				F12CF1D9BE84EC55205A773E /* Embed CLI and resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2C35EF22AA51085F5968DCAA /* PBXTargetDependency */,
+			);
+			name = Copy4AI;
+			packageProductDependencies = (
+				745037E4AB74BEC21A96E4B8 /* CP4AICore */,
+			);
+			productName = Copy4AI;
+			productReference = 2FD19718B7CADFE77EF6B864 /* Copy4AI.app */;
+			productType = "com.apple.product-type.application";
+		};
+		FCF176AA30BB120675087644 /* cp4ai */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 934E5642A95272B829EA4465 /* Build configuration list for PBXNativeTarget "cp4ai" */;
+			buildPhases = (
+				C9C1C673AC864917F2BE5560 /* Sources */,
+				423EF11921BD3D987741A231 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = cp4ai;
+			packageProductDependencies = (
+				A5B898E66732D3ADAFCBE84B /* CP4AICore */,
+			);
+			productName = cp4ai;
+			productReference = 24550F767AECD80E6FABEB84 /* cp4ai */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BBB7A4ADA7C125CBA1865F7C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					82792B2A034048B57A7BD0F4 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+					FCF176AA30BB120675087644 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = AB245E6CDF16D681B3E9FA1B /* Build configuration list for PBXProject "Copy4AI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7EB9ABC3780EAF8D4894E731;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AC6A8AD8E4876BE97B5F43BF /* XCLocalSwiftPackageReference "Packages/CP4AICore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 61ED6BBCFB6C81F3D33E4957 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				82792B2A034048B57A7BD0F4 /* Copy4AI */,
+				FCF176AA30BB120675087644 /* cp4ai */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		F12CF1D9BE84EC55205A773E /* Embed CLI and resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed CLI and resources";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\nAPP_DIR=\"$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH\"\nif [ -x \"$BUILT_PRODUCTS_DIR/cp4ai\" ]; then\n  cp \"$BUILT_PRODUCTS_DIR/cp4ai\" \"$APP_DIR/MacOS/cp4ai\"\n  chmod +x \"$APP_DIR/MacOS/cp4ai\"\n  codesign --force --sign - --timestamp=none \"$APP_DIR/MacOS/cp4ai\" || true\nfi\n\"$SRCROOT/packaging/embed_resources.sh\" \"$APP_DIR\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2AB0F77EFF0448F79CD85EC0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B06F4D250EBCE5F606C79950 /* AppDelegate.swift in Sources */,
+				D035B5BA3249537AB1C1FE07 /* AppLog.swift in Sources */,
+				C83F397BC0197EEE404D1B29 /* CLIInstaller.swift in Sources */,
+				1080CD90128DAB98E1A3CF15 /* ProgressController.swift in Sources */,
+				44033D60F9D6B062399BBCF1 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9C1C673AC864917F2BE5560 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CE2FF8EAC872783D34650B6D /* CP4AICLI.swift in Sources */,
+				BC2A738F25D9DE062F519CFC /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2C35EF22AA51085F5968DCAA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FCF176AA30BB120675087644 /* cp4ai */;
+			targetProxy = 28BFFAE5B31833B554258E1B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2CFF89E6CBCA05E92B1309D1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		437743BDA57B928DD4C58616 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titusng0110.cp4ai.cli;
+				PRODUCT_NAME = cp4ai;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		43D8E50167204995B1B1DA8F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		56D529B4D16D12D7F7974D91 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titusng0110.cp4ai.cli;
+				PRODUCT_NAME = cp4ai;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		C9015ABB5CFA8884DA1B8477 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 3.1.0;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 3.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.titusng0110.cp4ai;
+				PRODUCT_NAME = "Copy 4 AI";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		FE03909189042E3C8770A0DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 3.1.0;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 3.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.titusng0110.cp4ai;
+				PRODUCT_NAME = "Copy 4 AI";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		225E3757357A74F9466B40BB /* Build configuration list for PBXNativeTarget "Copy4AI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FE03909189042E3C8770A0DD /* Debug */,
+				C9015ABB5CFA8884DA1B8477 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		934E5642A95272B829EA4465 /* Build configuration list for PBXNativeTarget "cp4ai" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				437743BDA57B928DD4C58616 /* Debug */,
+				56D529B4D16D12D7F7974D91 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AB245E6CDF16D681B3E9FA1B /* Build configuration list for PBXProject "Copy4AI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2CFF89E6CBCA05E92B1309D1 /* Debug */,
+				43D8E50167204995B1B1DA8F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AC6A8AD8E4876BE97B5F43BF /* XCLocalSwiftPackageReference "Packages/CP4AICore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CP4AICore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		745037E4AB74BEC21A96E4B8 /* CP4AICore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CP4AICore;
+		};
+		A5B898E66732D3ADAFCBE84B /* CP4AICore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CP4AICore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = BBB7A4ADA7C125CBA1865F7C /* Project object */;
+}

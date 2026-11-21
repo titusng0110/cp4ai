@@ -1,0 +1,110 @@
+name: Copy4AI
+options:
+  bundleIdPrefix: com.titusng0110
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGNING_ALLOWED: YES
+    ENABLE_HARDENED_RUNTIME: NO
+    CLANG_ENABLE_MODULES: YES
+
+packages:
+  CP4AICore:
+    path: Packages/CP4AICore
+
+targets:
+  Copy4AI:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: CP4AICore
+      - target: cp4ai
+        embed: false
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Copy 4 AI
+        CFBundleDisplayName: Copy 4 AI
+        CFBundleIdentifier: com.titusng0110.cp4ai
+        CFBundlePackageType: APPL
+        CFBundleSignature: "????"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleIconFile: CP4AI.icns
+        LSMinimumSystemVersion: "15.0"
+        LSUIElement: true
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: MIT License
+        LSApplicationCategoryType: public.app-category.productivity
+        NSServices:
+          - NSMenuItem:
+              default: Copy 4 AI
+            NSMessage: copy4AI
+            NSRequiredContext:
+              NSApplicationIdentifier: com.apple.finder
+            NSSendFileTypes:
+              - com.adobe.pdf
+              - org.openxmlformats.wordprocessingml.document
+              - org.openxmlformats.presentationml.presentation
+    settings:
+      base:
+        PRODUCT_NAME: Copy 4 AI
+        PRODUCT_BUNDLE_IDENTIFIER: com.titusng0110.cp4ai
+        MARKETING_VERSION: "3.1.0"
+        CURRENT_PROJECT_VERSION: "3.1.0"
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
+    postBuildScripts:
+      - name: Embed CLI and resources
+        script: |
+          set -euo pipefail
+          APP_DIR="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH"
+          if [ -x "$BUILT_PRODUCTS_DIR/cp4ai" ]; then
+            cp "$BUILT_PRODUCTS_DIR/cp4ai" "$APP_DIR/MacOS/cp4ai"
+            chmod +x "$APP_DIR/MacOS/cp4ai"
+            codesign --force --sign - --timestamp=none "$APP_DIR/MacOS/cp4ai" || true
+          fi
+          "$SRCROOT/packaging/embed_resources.sh" "$APP_DIR"
+
+  cp4ai:
+    type: tool
+    platform: macOS
+    sources:
+      - path: CLI
+    dependencies:
+      - package: CP4AICore
+    settings:
+      base:
+        PRODUCT_NAME: cp4ai
+        PRODUCT_BUNDLE_IDENTIFIER: com.titusng0110.cp4ai.cli
+
+schemes:
+  Copy4AI:
+    build:
+      targets:
+        Copy4AI: all
+        cp4ai: all
+    run:
+      config: Debug
+  cp4ai:
+    build:
+      targets:
+        cp4ai: all
+    run:
+      config: Debug

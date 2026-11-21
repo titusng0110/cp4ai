@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent
-WIDTH, HEIGHT = 1320, 840
+WIDTH, HEIGHT = 1320, 960
 BACKGROUND = "#f7f7f9"
 INK = "#1d1d1f"
 MUTED = "#6e6e73"
@@ -34,8 +34,8 @@ def main() -> int:
         fill=INK,
     )
 
-    subtitle = "Then go to Applications and double click on Copy 4 AI.app"
-    subtitle_font = font(44, bold=True)
+    subtitle = "Then open it once to install the Quick Action and command-line tools"
+    subtitle_font = font(40, bold=True)
     subtitle_width = draw.textlength(subtitle, font=subtitle_font)
     draw.text(
         ((WIDTH - subtitle_width) / 2, 164),
@@ -44,11 +44,21 @@ def main() -> int:
         fill=INK,
     )
 
-    arrow_y = 460
+    arrow_y = 500
     draw.line((524, arrow_y, 784, arrow_y), fill=ARROW, width=6)
     draw.polygon(
         [(784, arrow_y - 16), (784, arrow_y + 16), (816, arrow_y)],
         fill=ARROW,
+    )
+
+    optional = "cp4ai and md4ai are installed automatically"
+    optional_font = font(30)
+    optional_width = draw.textlength(optional, font=optional_font)
+    draw.text(
+        ((WIDTH - optional_width) / 2, 800),
+        optional,
+        font=optional_font,
+        fill=MUTED,
     )
 
     image.save(ROOT / "dmg-background.png", dpi=(144, 144))

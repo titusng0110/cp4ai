@@ -1,18 +1,35 @@
-# Python environment and build artifacts
-/.venv/
+# Python
+.venv/
 __pycache__/
 *.py[cod]
-/build/
-/dist/
+
+# Python helper build artifacts
+helper/.venv/
+helper/build/
+helper/dist/
+
+# Fetched native tools and caches
+packaging/native/
+packaging/.cache/
+
+# Build output
+build/
+dist/
+DerivedData/
 *.egg-info/
 
-# Native tools and downloads are fetched for a DMG build, never committed
-/packaging/native/
-/packaging/.cache/
+# SwiftPM
+.build/
+Packages/CP4AICore/.build/
 
-# Temporary files and logs
-/tmp/
-convert.log
+# Xcode user data
+**/xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
 
 # macOS
 .DS_Store
+
+# Logs and temporary files
+*.log
+*.tmp

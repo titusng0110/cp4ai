@@ -1,0 +1,16 @@
+[project]
+name = "cp4ai-pdf-helper"
+version = "3.1.0"
+description = "PDF text extraction and OCR-region rasterisation for Copy 4 AI"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pymupdf==2.1",
+    "pymupdf4llm==2.1",
+    "pymupdf-layout==2.1",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+build = ["pyinstaller==6.22.3"]
