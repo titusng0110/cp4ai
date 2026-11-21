@@ -58,6 +58,26 @@
 				<string>org.openxmlformats.presentationml.presentation</string>
 			</array>
 		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Copy 4 AI (no OCR)</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>copy4AINoOCR</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>org.openxmlformats.wordprocessingml.document</string>
+				<string>org.openxmlformats.presentationml.presentation</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

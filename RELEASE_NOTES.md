@@ -7,8 +7,10 @@ Vision OCR pipeline.
 
 - **Swift app** — the Quick Action handler and floating progress panel are now
   AppKit/Swift, with a shared Swift core for DOCX, PPTX and PDF conversion.
-- **No main window** — the Finder Quick Action is the only GUI. The app
+- **No main window** — the Finder Quick Actions are the only GUI. The app
   registers itself as a native Finder service and exits when idle.
+- **Two Quick Actions** — **Copy 4 AI** uses Apple Vision OCR; **Copy 4 AI
+  (no OCR)** skips OCR entirely and marks images as omitted.
 - **Apple Vision OCR** — uses the current Swift `RecognizeTextRequest`
   API. Tesseract and the `--tesseract`/`--livetext` flags are gone.
 - **Python only for PDF parsing** — a small PyInstaller helper built around

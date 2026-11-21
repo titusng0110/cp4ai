@@ -19,9 +19,12 @@ public struct ConversionOptions {
     }
 
     /// The Quick Action uses a lower cap so Vision does not exhaust memory.
-    public static func quickAction(resources: CP4AIResources = .locate()) -> ConversionOptions {
+    public static func quickAction(
+        useOCR: Bool = true,
+        resources: CP4AIResources = .locate()
+    ) -> ConversionOptions {
         let cap = min(max(1, ProcessInfo.processInfo.activeProcessorCount), 6)
-        return ConversionOptions(jobs: cap, resources: resources)
+        return ConversionOptions(useOCR: useOCR, jobs: cap, resources: resources)
     }
 }
 

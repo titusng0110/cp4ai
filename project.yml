@@ -62,6 +62,15 @@ targets:
               - com.adobe.pdf
               - org.openxmlformats.wordprocessingml.document
               - org.openxmlformats.presentationml.presentation
+          - NSMenuItem:
+              default: Copy 4 AI (no OCR)
+            NSMessage: copy4AINoOCR
+            NSRequiredContext:
+              NSApplicationIdentifier: com.apple.finder
+            NSSendFileTypes:
+              - com.adobe.pdf
+              - org.openxmlformats.wordprocessingml.document
+              - org.openxmlformats.presentationml.presentation
     settings:
       base:
         PRODUCT_NAME: Copy 4 AI

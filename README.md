@@ -12,9 +12,10 @@ interpret them; silently dropping a point is not recoverable.
 
 ## What is included
 
-- **Finder Quick Action** — select DOCX/PDF/PPTX files, right-click →
-  Quick Actions → **Copy 4 AI**. A small progress panel shows the work and the
-  concatenated Markdown lands on the clipboard.
+- **Finder Quick Actions** — select DOCX/PDF/PPTX files, right-click →
+  Quick Actions → **Copy 4 AI** (OCR) or **Copy 4 AI (no OCR)**. A small
+  progress panel shows the work and the concatenated Markdown lands on the
+  clipboard.
 - **`cp4ai`** — the same conversion from a terminal, copying to the clipboard.
 - **`md4ai`** — writes `<source>.pdf.md`, `<source>.docx.md` or
   `<source>.pptx.md` next to the input.
@@ -51,8 +52,9 @@ On first launch the app installs:
 
 both pointing at the app's embedded CLI, and appends a marked block to
 `~/.zprofile` so `~/.local/bin` is on `PATH`. Open a new terminal after the
-first launch. To install the Quick Action, select DOCX/PDF/PPTX files in
-Finder, then right-click → **Quick Actions** → **Copy 4 AI**.
+first launch. To use the Quick Actions, select DOCX/PDF/PPTX files in Finder,
+then right-click → **Quick Actions** → **Copy 4 AI** or
+**Copy 4 AI (no OCR)**.
 
 To remove everything:
 
@@ -62,7 +64,7 @@ rm -f "$HOME/.local/bin/cp4ai" "$HOME/.local/bin/md4ai"
 # Then remove the "Copy 4 AI command-line tools" block from ~/.zprofile.
 ```
 
-The Quick Action disappears with the app after Finder refreshes its Services.
+The Quick Actions disappear with the app after Finder refreshes its Services.
 
 ## CLI
 

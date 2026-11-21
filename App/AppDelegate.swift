@@ -3,9 +3,14 @@ import CP4AICore
 import Foundation
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private struct PendingBatch {
+        let sources: [URL]
+        let useOCR: Bool
+    }
+
     private let progress = ProgressController()
     private var busy = false
-    private var pending: [[URL]] = []
+    private var pending: [PendingBatch] = []
     private var idleExit: DispatchWorkItem?
     private var quickActionReceived = false
 
@@ -33,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickActionReceived = true
         idleExit?.cancel()
         idleExit = nil
-        beginBatch(urls)
+        beginBatch(urls, useOCR: true)
     }
 
     /// Finder Quick Action entry point (`NSMessage = copy4AI`).
@@ -41,6 +46,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ pasteboard: NSPasteboard,
         userData: String,
         error: AutoreleasingUnsafeMutablePointer<NSString>
+    ) {
+        handleService(pasteboard, error: error, useOCR: true)
+    }
+
+    /// Finder Quick Action entry point (`NSMessage = copy4AINoOCR`).
+    @objc func copy4AINoOCR(
+        _ pasteboard: NSPasteboard,
+        userData: String,
+        error: AutoreleasingUnsafeMutablePointer<NSString>
+    ) {
+        handleService(pasteboard, error: error, useOCR: false)
+    }
+
+    private func handleService(
+        _ pasteboard: NSPasteboard,
+        error: AutoreleasingUnsafeMutablePointer<NSString>,
+        useOCR: Bool
     ) {
         quickActionReceived = true
         idleExit?.cancel()
@@ -55,10 +77,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             error.pointee = "Select DOCX, PDF or PPTX files, not folders." as NSString
             return
         }
-        beginBatch(urls)
+        beginBatch(urls, useOCR: useOCR)
     }
 
-    private func beginBatch(_ urls: [URL]) {
+    private func beginBatch(_ urls: [URL], useOCR: Bool) {
         let (valid, rejected) = SourceFilter.filter(urls)
         guard !valid.isEmpty else {
             let reason = rejected.first?.1 ?? "no supported files"
@@ -67,16 +89,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let sources = SourceFilter.sortedByName(valid)
         if busy {
-            pending.append(sources)
+            pending.append(PendingBatch(sources: sources, useOCR: useOCR))
             progress.queued()
             return
         }
 
         busy = true
         progress.begin(count: sources.count, skipped: rejected.count)
-        AppLog.write("starting batch: \(sources.map(\.lastPathComponent).joined(separator: ", "))")
+        AppLog.write(
+            "starting \(useOCR ? "OCR" : "no-OCR") batch: "
+                + sources.map(\.lastPathComponent).joined(separator: ", ")
+        )
 
-        let options = ConversionOptions.quickAction()
+        let options = ConversionOptions.quickAction(useOCR: useOCR)
         let engine = ConversionEngine(options: options)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -136,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             } else {
                 let next = self.pending.removeFirst()
-                self.beginBatch(next)
+                self.beginBatch(next.sources, useOCR: next.useOCR)
             }
         }
     }
